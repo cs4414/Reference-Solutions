@@ -46,12 +46,11 @@ fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::co
                             visitor_count += 1;
                         }
                         let request_str = str::from_bytes(bytes.slice(0, bytes.len() - 1));
-                        let path_str = match request_str.split_iter(' ').nth(1) {
-                            Some(s) => s,
-                            None => "/",
-                        };
-                        println(fmt!("file path:%s", path_str));
-                        let file_path = &os::getcwd().push(path_str);
+                        
+                        let path = request_str.split_iter(' ').nth(1).get();
+                        println(fmt!("Request for path: %s", path));
+                        
+                        let file_path = &os::getcwd().push(path.replace("/../", ""));
                         if !os::path_exists(file_path) || os::path_is_dir(file_path) {
                             println(fmt!("Request received:\n%s", request_str));
                             let response: ~str = fmt!(

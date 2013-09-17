@@ -9,7 +9,7 @@ extern mod extra;
 
 use extra::uv;
 use extra::{net_ip, net_tcp};
-use std::{io, os, path, str};
+use std::{io, os, path, str, result};
 
 static BACKLOG: uint = 5;
 static PORT:    uint = 4414;
@@ -68,7 +68,18 @@ fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::co
                             net_tcp::write(&sock, response.as_bytes_with_null_consume());
                         }
                         else {
-                            println(fmt!("serve file: %?", file_path));
+                            println(fmt!("serve large file: %?", file_path));
+                            
+                            let mut buf: ~[u8];
+                            let buf_len: uint = 100*1024;
+                            let file_reader: @io::Reader = result::get(&io::file_reader(file_path));
+                            while true {
+                                buf = file_reader.read_bytes(buf_len);
+                                if (!buf.is_empty()) {
+                                    sock.write(buf);
+                                } else { break;}
+                            }
+                            /*
                             match io::read_whole_file(file_path) {
                                 Ok(file_data) => {
                                     sock.write(file_data);
@@ -77,6 +88,7 @@ fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::co
                                     println(err);
                                 }
                             }
+                            */
                         }
                     }
                 };

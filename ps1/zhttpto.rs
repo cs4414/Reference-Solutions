@@ -16,14 +16,6 @@ static PORT:    uint = 4414;
 static IPV4_LOOPBACK: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
 
-fn load_file(pathname: ~str) -> ~[~str] {
-    let filereader : Result<@Reader, ~str> = io::file_reader(~path::Path(pathname));
-    match filereader {
-        Ok(reader) => reader.read_lines(),
-        Err(msg) => fail!("Cannot open file: " + msg),
-    }
-}
-
 fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::comm::SharedChan<Option<extra::net_tcp::TcpErrData>>)
 {
     do spawn {

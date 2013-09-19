@@ -8,6 +8,8 @@ import csv
 import re
 import urllib
 import os
+import zipfile
+from subprocess import call
 
 url_pattern = re.compile(r'https://github.com/([a-zA-Z0-9-]+)/([a-zA-Z0-9-]+)/(releases/tag/|tree/)([vV]?[0-9\.]+)')
 
@@ -54,7 +56,23 @@ def main():
     if not os.path.isdir(tarball_dir):
         os.makedirs(tarball_dir)
         
-    csv_parse(csv_path, tarball_dir)
+#    csv_parse(csv_path, tarball_dir)
+    os.chdir(tarball_dir)
+
+    for files in os.listdir("."):
+        if files.endswith(".zip"):
+            folder = os.path.splitext(files)[0]
+            if not os.path.isdir(folder):
+                archive = zipfile.ZipFile(files)
+                archive.extractall(os.path.splitext(files)[0])
+            os.chdir(folder)
+            os.chdir(os.listdir(".")[0])
+
+            if os.path.isfile("./zhttpto.rs"):
+                os.system("../../../cloc.pl zhttpto.rs")
+            else:
+                print "no zhttpto.rs: %s\n" % os.getcwd()
+            os.chdir("../..")
 
 if  __name__ =='__main__':main()
 

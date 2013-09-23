@@ -60,7 +60,7 @@ fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::co
                                         h2 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green}
                                  </style></head>
                                  <body>
-                                 <h1>Greetings, Rusty!</h1>
+                                 <h1>Greetings, Krusty!</h1>
                                  <h2>Visitor count: %u</h2>
                                  </body></html>\r\n", unsafe{visitor_count});
 

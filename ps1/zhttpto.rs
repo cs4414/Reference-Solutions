@@ -5,6 +5,8 @@
 //
 // Special thanks to Kiet Tran for providing code we incorporated into this.
 // 
+// Warning: this is not a secure server!
+//
 // University of Virginia - cs4414 Fall 2013
 // Weilin Xu and David Evans
 // Version 0.1

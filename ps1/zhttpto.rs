@@ -1,6 +1,13 @@
 //
 // zhttpto.rs
 //
+// Reference solution for PS1
+//
+// Special thanks to Kiet Tran for providing code we incorporated into this.
+// 
+// Note: it would be very unwise to run this server on a machine that is
+// on the Internet and contains any sensitive files!
+//
 // University of Virginia - cs4414 Fall 2013
 // Weilin Xu and David Evans
 // Version 0.1
@@ -9,20 +16,12 @@ extern mod extra;
 
 use extra::uv;
 use extra::{net_ip, net_tcp};
-use std::{io, os, path, str, result};
+use std::{io, os, str};
 
 static BACKLOG: uint = 5;
 static PORT:    uint = 4414;
 static IPV4_LOOPBACK: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
-
-fn load_file(pathname: ~str) -> ~[~str] {
-    let filereader : Result<@Reader, ~str> = io::file_reader(~path::Path(pathname));
-    match filereader {
-        Ok(reader) => reader.read_lines(),
-        Err(msg) => fail!("Cannot open file: " + msg),
-    }
-}
 
 fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::comm::SharedChan<Option<extra::net_tcp::TcpErrData>>)
 {
@@ -61,25 +60,14 @@ fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::co
                                         h2 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green}
                                  </style></head>
                                  <body>
-                                 <h1>Greetings, Rusty!</h1>
+                                 <h1>Greetings, Krusty!</h1>
                                  <h2>Visitor count: %u</h2>
                                  </body></html>\r\n", unsafe{visitor_count});
 
                             net_tcp::write(&sock, response.as_bytes_with_null_consume());
                         }
                         else {
-                            println(fmt!("serve large file: %?", file_path));
-                            
-                            let mut buf: ~[u8];
-                            let buf_len: uint = 100*1024;
-                            let file_reader: @io::Reader = result::get(&io::file_reader(file_path));
-                            while true {
-                                buf = file_reader.read_bytes(buf_len);
-                                if (!buf.is_empty()) {
-                                    sock.write(buf);
-                                } else { break;}
-                            }
-                            /*
+                            println(fmt!("serve file: %?", file_path));
                             match io::read_whole_file(file_path) {
                                 Ok(file_data) => {
                                     sock.write(file_data);
@@ -88,7 +76,6 @@ fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::co
                                     println(err);
                                 }
                             }
-                            */
                         }
                     }
                 };

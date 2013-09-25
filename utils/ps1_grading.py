@@ -8,8 +8,9 @@ import csv
 import re
 import urllib
 import os
+import sys
 import zipfile
-from subprocess import call
+import subprocess
 
 url_pattern = re.compile(r'https://github.com/([a-zA-Z0-9-]+)/([a-zA-Z0-9-]+)/(releases/tag/|tree/)([vV]?[0-9\.]+)')
 
@@ -69,7 +70,9 @@ def main():
             os.chdir(os.listdir(".")[0])
 
             if os.path.isfile("./zhttpto.rs"):
-                os.system("../../../cloc.pl zhttpto.rs")
+                print "%s:\n" % os.getcwd()
+                sys.stdout.flush()
+                os.system("../../../cloc.pl --quiet zhttpto.rs")
             else:
                 print "no zhttpto.rs: %s\n" % os.getcwd()
             os.chdir("../..")

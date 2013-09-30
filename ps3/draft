@@ -10,27 +10,27 @@ approach
 * buffer
 * priority scheduling (SPRT ...)
 
-
-Problem 1: [code work] reduce the memory footprint when serving large file downloading
-
+Problem +: mutex for safe counter
 
 Problem 2: study several scheduling methods (round-robin, FIFO, LIFO, SPRT ...)
 
 
 Problem 3: [code work] implement your preferred scheduling in zhttpta (in user space but not kernel)
 
+Problem 1: [code work] reduce the memory footprint when serving large file downloading
 
-Problem 4: [maybe code work, or use the provided test tool?]test and compare zhttpta with zhttpto, any performance improvement?
+
+move later, may implement later: Problem 4: [maybe code work, or use the provided test tool?]test and compare zhttpta with zhttpto, any performance improvement?
 
 
-Problem 5: Mordern solution for serving static files (CDN? what else?)
+maybe not good. Problem 5: Mordern solution for serving static files (CDN? what else?)
 
 
 Problem 6: [code work] integrate gash in zhttpa, how would you schedule the connection to gash?
 
 
 Reference: 
-[  ] Web servers under overload: How scheduling can help
-[31] Size-based scheduling to improve web performance. ACM Transactions on Computer Systems, 21(2), May 2003.
-[54] SWIFT: Scheduling in web servers for fast reponse time. In Second IEEE International Symposium on Network Computing and Applications, April 2003.
+[  ] Bianca Schroeder, Mor Harchol-Balter (CMU). Web servers under overload: How scheduling can help
+[31] Mor Harchol-Balter, et al (CMU). Size-based scheduling to improve web performance. ACM Transactions on Computer Systems, 21(2), May 2003.
+[54] Mayank Rawat, et al (UIUC). SWIFT: Scheduling in web servers for fast reponse time. In Second IEEE International Symposium on Network Computing and Applications, April 2003.
 

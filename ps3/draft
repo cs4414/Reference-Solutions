@@ -1,0 +1,22 @@
+zhttpta: a higher performance web server
+
+goal
+* lowerer average response time
+* enlarge server capacity
+
+approach
+*buffer
+*SPRT
+
+
+Problem 1: [code work] reduce the memory footprint when serving large file downloading
+
+Problem 2: SRPT (Shortest Remaining Processing Time) scheduling
+
+Problem 3: [code work] implement SRPT scheduling in your zhttpta
+
+
+Problem 4: test and compare zhttpto with zhttpta
+
+
+Problem 5: 

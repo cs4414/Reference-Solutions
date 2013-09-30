@@ -14,7 +14,7 @@ approach
 Problem 1: [code work] reduce the memory footprint when serving large file downloading
 
 
-Problem 2: study several scheduling methods (round-robin, FIFO, LIFO)
+Problem 2: study several scheduling methods (round-robin, FIFO, LIFO, SPRT ...)
 
 
 Problem 3: [code work] implement your preferred scheduling in zhttpta (in user space but not kernel)
@@ -24,6 +24,10 @@ Problem 4: [maybe code work, or use the provided test tool?]test and compare zht
 
 
 Problem 5: Mordern solution for serving static files (CDN? what else?)
+
+
+Problem 6: [code work] integrate gash in zhttpa, how would you schedule the connection to gash?
+
 
 Reference: 
 [  ] Web servers under overload: How scheduling can help

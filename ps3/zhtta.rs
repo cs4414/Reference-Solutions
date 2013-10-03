@@ -74,6 +74,8 @@ fn main() {
                     stream.write(response.as_bytes());
                 }
                 else {
+                    // may do scheduling here by file_path
+                    
                     println(fmt!("serve file: %?", file_path));
                     match io::read_whole_file(file_path) {
                         Ok(file_data) => {

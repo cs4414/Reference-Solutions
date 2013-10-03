@@ -20,6 +20,7 @@ use std::io::println;
 use std::cell::Cell;
 use std::rt::test::*;
 use std::{os, str, io};
+use extra::sync::RWLock;
 
 static PORT:    int = 4414;
 static IPV4_LOOPBACK: &'static str = "127.0.0.1";
@@ -27,6 +28,8 @@ static mut visitor_count: uint = 0;
 
 
 fn main() {
+    let rwx: RWLock = RWLock::new();
+    
     let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
     
     println(fmt!("Listening on tcp port %d ...", PORT));
@@ -38,9 +41,10 @@ fn main() {
         println!("Saw connection!");
         let stream = Cell::new(stream);
         // Start a task to handle the connection
+        let rwx_task = rwx.clone();
         do spawntask_later {
-            unsafe {
-                visitor_count += 1;
+            do rwx_task.write {
+                unsafe { visitor_count += 1;}
             }
             let mut stream = stream.take();
             let mut buf = [0, ..500];
@@ -65,7 +69,7 @@ fn main() {
                          <body>
                          <h1>Greetings, Krusty!</h1>
                          <h2>Visitor count: %u</h2>
-                         </body></html>\r\n", unsafe{visitor_count});
+                         </body></html>\r\n", do rwx_task.read { unsafe{visitor_count}});
 
                     stream.write(response.as_bytes());
                 }

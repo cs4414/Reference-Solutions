@@ -13,9 +13,11 @@ Due: 11:59pm on Monday, 28 October
 
 The goals of this assignment are to:
 
-- Learn about job scheduling policies and their applicability to a variety of scenes.
+- Learn about readers-writer lock, one of the advanced mutual exclusion primitives.
 
-- Understand how to optimize the performance of application by implementing a simple web server.
+- Learn about job scheduling strategies and their applicability to a variety of scenes.
+
+- Understand how to optimize the performance of a application by implementing a simple web server.
 
 
 **Collaboration Policy.** For this problem set, you are expected to
@@ -78,13 +80,29 @@ repository that contains starting code for ps3.
 A leap rom zhttpto to zhtta.
 
 
+## Taste the fresh Rust 0.8
+zhttpto in Rust 0.8
+explain
+
+
+https://github.com/cs4414/CS4414-Public-Reference-Solution/commit/0fe2e9ad165d01038a92656252f230f6f5013644
+diff from 0.7:
+* module path movement
+* TCP connection API was totally changed.
+
+
+
+## Explain the starting code
+explain simple FILO scheduling
+
+
 ## Safe counter in need
 
 <div class="problem">
 
 <b>Problem 1.</b> (modify <span class="file">zhtta.rs</span>) 
 <br>
-Modify the zhtta code so it supports a safe visitor counter protected by RWLock.
+Modify the zhtta code so it supports a safe visitor counter protected by Read/Write Lock. You should implement your own mutex code. Referencing the mutex API in Rust will just earn 20% of grade.
 </div>
 
 ## Job scheduling methods
@@ -101,13 +119,34 @@ assume the bottleneck as network bandwidth
 
 
 ## Schedule web requests
+implement SPRT
+
+Reference: 
+[  ] Bianca Schroeder, Mor Harchol-Balter (CMU). Web servers under overload: How scheduling can help
+[31] Mor Harchol-Balter, et al (CMU). Size-based scheduling to improve web performance. ACM Transactions on Computer Systems, 21(2), May 2003.
+[54] Mayank Rawat, et al (UIC). SWIFT: Scheduling in web servers for fast reponse time. In Second IEEE International Symposium on Network Computing and Applications, April 2003.
 
 <div class="problem">
-
 <b>Problem 3.</b> (modify <span class="file">zhtta.rs</span>)
 <br>
 Modify the zhtta code to implement your preferred scheduling (in user space but not kernel). Please read the example of FILO before coding.
 </div>
 
+
+## GASH in zhtta
+
+<div class="problem">
+<b>Problem 4.</b> (modify <span class="file">zhtta.rs</span>)
+<br>
+Modify the zhtta code to integrate gash in zhtta. You may use your own gash, or use that in PS2 reference solution. How would you schedule the connection to gash among other file requests?
+</div>
+
+
+## C10k problem
+<div class="problem">
+<b>Problem 5.</b>
+<br>
+Use an existing tool to test and compare the performance of zhtta and zhttpto. Is there any improvement on performance? Why?
+</div>
 
 

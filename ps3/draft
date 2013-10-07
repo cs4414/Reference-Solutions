@@ -14,6 +14,9 @@ Problem 1: mutex for safe counter
 
 
 Problem 2: study several scheduling methods (round-robin, FIFO, LIFO, SPRT ...), and design your preferred connection scheduling policy.
+assume the bottleneck as network bandwidth
+1. file size - bytes sent
+2. server-client network connection bandwidth (could be inferred by IP address )
 
 
 Problem 3: [code work] implement your preferred scheduling in zhtta (in user space but not kernel)
@@ -23,6 +26,8 @@ Problem 4: [code work] integrate gash in zhtta, how would you schedule the conne
 
 
 Problem 5: [code work] reduce the memory footprint when serving large file downloading (actually, I guess students will have realized this problem when solving problem 3. so it may be removed safely.)
+
+
 
 
 Problem 6: [use the provided test tool]test and compare zhttpta with zhttpto, any performance improvement?

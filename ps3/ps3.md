@@ -75,5 +75,17 @@ repository that contains starting code for ps3.
 
 
 ## Background
+A leap rom zhttpto to zhtta.
 
+
+## Safe counter in need
+
+<div class="problem">
+
+<b>Problem 1.</b> (modify <span class="file">zhtta.rs</span>) 
+<br>
+Modify the zhtta code so it supports a safe visitor counter protected by RWLock.
+</div>
+
+##
 

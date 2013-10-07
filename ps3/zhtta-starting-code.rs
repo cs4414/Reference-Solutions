@@ -24,6 +24,7 @@ use std::comm::*;
 
 static PORT:    int = 4414;
 static IPV4_LOOPBACK: &'static str = "127.0.0.1";
+static mut visitor_count: uint = 0;
 
 struct sched_msg {
     stream: Option<std::rt::io::net::tcp::TcpStream>,
@@ -67,9 +68,6 @@ fn main() {
             }
         }
     }
-
-    let visitor_count: uint = 0;
-    let shared_visitor_count = arc::RWArc::new(visitor_count);
     
     let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
     
@@ -79,14 +77,13 @@ fn main() {
     // we can limit the incoming connection count.
     //for stream in acceptor.incoming().take(10 as uint) {
     for stream in acceptor.incoming() {
-        println!("Saw connection!");
         let stream = Cell::new(stream);
-        // Start a task to handle the connection
-        let task_visitor_count = shared_visitor_count.clone();
+        
+        // Start a new task to handle the connection
         let child_chan = chan.clone();
         do spawn {
-            do task_visitor_count.write |vc| {
-                *vc += 1;
+            unsafe {
+                visitor_count += 1;
             }
             
             let mut stream = stream.take();
@@ -112,12 +109,12 @@ fn main() {
                          <body>
                          <h1>Greetings, Krusty!</h1>
                          <h2>Visitor count: %u</h2>
-                         </body></html>\r\n", do task_visitor_count.write |vc| {*vc});
+                         </body></html>\r\n", unsafe{visitor_count});
 
                     stream.write(response.as_bytes());
                 }
                 else {
-                    // may do scheduling here by file_path
+                    // may do scheduling here
                     let msg: sched_msg = sched_msg{stream: stream, filepath: file_path.clone()};
                     child_chan.send(msg);
                     

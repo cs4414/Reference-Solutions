@@ -77,49 +77,71 @@ repository that contains starting code for ps3.
 
 
 ## Background
-A leap rom zhttpto to zhtta.
+
+introduce the main-stream modern Web servers: apache, nginx, 
+You are not expected to build a better one in this assignment, but it's possible to build a very special one.
 
 
 ## Taste the fresh Rust 0.8
-zhttpto in Rust 0.8
-explain
+
+The latest Rust 0.8 has been released 10 days ago on Sep 26. [Rust 0.8 Released page](https://mail.mozilla.org/pipermail/rust-dev/2013-September/005804.html) We should upgrade our Rust environment to this latest version in PS3 for the numerous bugfixes since 0.7. Follwing this tutorial in [Piazza](https://piazza.com/class/hiuvlqlyk4925d?cid=64), you should be able to get Rust 0.8 work on your machine.
+
+Unfortunetely, the 0.8 release also includes about 2200 changes in the language. Not surprisingly, your zhttpto code in PS1 couldn't run on Rust 0.8. But don't worry about that, we have provided a latest zhttpto written in Rust 0.8 in our [Github public repository of reference solutions](https://github.com/cs4414/Public-Reference-Solution). You could view this [commit diff page](https://github.com/cs4414/CS4414-Public-Reference-Solution/commit/0fe2e9ad165d01038a92656252f230f6f5013644) to experience the changes in Rust 0.8.
+
+As you can see from the diff page, several modules changed their paths, and the network-related API were totally rewritten. 
 
 
-https://github.com/cs4414/CS4414-Public-Reference-Solution/commit/0fe2e9ad165d01038a92656252f230f6f5013644
-diff from 0.7:
-* module path movement
-* TCP connection API was totally changed.
+## zhtta - 10^42 times better than zhttptos
+
+In PS1, we have implemented a simple Web server named zhttpto. No matter how much grade you earned, however, it's far from an awesome Web server. With the help of Rust, zhttpto has got a good concurrency comparing the ancient web servers, but there still exists several obvious drawbacks. First, zhttpto uses an unsafe visitor counter in the code. What's worse, it exposes all of the files on your file system to web users. Moreover, it doesn't support advanced priority scheduling on the network requests. 
+
+You will learn how to eliminate these drawbacks in this assignment and you might design and implement more interesting features. It will definitely take a leap from a simple zhttpto to an advanced zhtta, and hopefully, we have provided starting code in `zhtta.rs` to help you take the first step.
 
 
+## Safe visitor counter
 
-## Explain the starting code
-explain simple FILO scheduling
+Visitor counter is one of the main features of zhtta, so we have no reason not to make it perfect. The most urgent challenge could be the concurrent access to the shared counter. 
 
-
-## Safe counter in need
+For the first problem, you are required to implement your own mutex mechanism and use it to manage the concurrent access to the visitor counter. 
 
 <div class="problem">
 
 <b>Problem 1.</b> (modify <span class="file">zhtta.rs</span>) 
 <br>
-Modify the zhtta code so it supports a safe visitor counter protected by Read/Write Lock. You should implement your own mutex code. Referencing the mutex API in Rust will just earn 20% of grade.
+Modify the zhtta code so it supports a safe visitor counter protected by Readers-writer Lock. You should implement your own mutex code. Referencing the API in Rust will only earn 20% of grade.
 </div>
 
-## Job scheduling methods
+## Scheduling strategies
+
+The world's first web server didn't meet the problem of requests scheduling because it could just accept a connection at a time. However, zhtta could accept thousands of http requests at a time and serve them concurrently. In this way, scheduling strategies may result in various performance.
+
+For the next problem, you are required to study several scheduling policies in detail.
 
 <div class="problem">
 
 <b>Problem 2.</b> (modify <span class="file">answers.md</span>)
 <br>
-study several scheduling methods (round-robin, FIFO, LIFO, SPRT ...), and design your preferred connection scheduling policy.
-assume the bottleneck as network bandwidth
-1. file size - bytes sent
-2. server-client network connection bandwidth (could be inferred by IP address )
+Study several scheduling methods, such as round-robin, FIFO, FILO, SRPT, list their pros and cons respectively.
 </div>
 
 
-## Schedule web requests
-implement SPRT
+## SRPT Scheduling on web requests
+
+Shortest-Remaining-Processing-Time-First (SRPT) is a well-known preemtive scheduling algorithm in Web servers. By giving priority to 
+
+assume the bottleneck as network bandwidth
+1. file size - bytes sent
+2. server-client network connection bandwidth (could be inferred by IP address )
+
+
+Rust uses a fair scheduling on concurrent tasks. 
+
+For the next problem, you are required to implement a SPRT scheduling algorithm on http requests.
+
+explain simple FILO scheduling example in starting code
+
+
+
 
 Reference: 
 [  ] Bianca Schroeder, Mor Harchol-Balter (CMU). Web servers under overload: How scheduling can help
@@ -133,7 +155,19 @@ Modify the zhtta code to implement your preferred scheduling (in user space but 
 </div>
 
 
-## GASH in zhtta
+
+
+
+## C10k problem
+
+<div class="problem">
+<b>Problem 5.</b>
+<br>
+Use an existing tool to test and compare the performance of zhtta and zhttpto. Is there any improvement on performance? Why?
+</div>
+
+
+## GASH in zhtta (Optional)
 
 <div class="problem">
 <b>Problem 4.</b> (modify <span class="file">zhtta.rs</span>)
@@ -142,11 +176,23 @@ Modify the zhtta code to integrate gash in zhtta. You may use your own gash, or 
 </div>
 
 
-## C10k problem
-<div class="problem">
-<b>Problem 5.</b>
-<br>
-Use an existing tool to test and compare the performance of zhtta and zhttpto. Is there any improvement on performance? Why?
-</div>
+## White hat (Optional)
+
+'../../'
 
 
+### Submission and Demos
+
+Once you decide to submit your project for grading after commiting some
+code and documents, you should add a tag on your code repository with a
+version number, and submit your assignment by providing the
+corresponding URL using the form (not yet posted) for PS3.  
+
+In addition to submitting using the form, you will also schedule a demo
+at which you will present your (hopefully working!) gash shell to one of
+the course staff and answer questions about how you did it.  Both team
+members are expected to be able to answer questions about how you
+implemented your shell at the demos.
+
+[Submission Form](not yet posted)  
+[Scheduling Demos](not yet posted)

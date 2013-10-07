@@ -1,5 +1,14 @@
-use std::{io, run, os, path, uint, libc};
+//
+// gash.rs
+//
+// Reference solution for PS2
+// Running on Rust 0.7
+//
+// University of Virginia - cs4414 Fall 2013
+// Weilin Xu, Purnam Jantrania, David Evans
+// Version 0.1
 
+use std::{io, run, os, path, uint, libc};
 use std::task;
 
 
@@ -51,7 +60,6 @@ fn handle_cmd(cmd_line: &str, pipe_in: libc::c_int, pipe_out: libc::c_int, pipe_
                                                                                     });
                              prog.finish();
                              // close the pipes after process terminates.
-                             // check by ifconfig | tail
                              if in_fd != 0 {os::close(in_fd);}
                              if out_fd != 1 {os::close(out_fd);}
                              if err_fd != 2 {os::close(err_fd);}
@@ -63,8 +71,6 @@ fn handle_cmd(cmd_line: &str, pipe_in: libc::c_int, pipe_out: libc::c_int, pipe_
 fn handle_cmdline(cmd_line:&str, bg_flag:bool)
 {
     // handle pipes
-    // why filter(|&x| x != "") should be removed???
-    //let progs: ~[~str] = cmd_line.split_str_iter("|").filter(|&x| x != "").transform(|x| x.to_owned()).collect();
     let progs: ~[~str] = cmd_line.split_str_iter("|").transform(|x| x.to_owned()).collect();
     
     let mut pipes = ~[];
@@ -107,7 +113,6 @@ fn main() {
         
         let mut cmd_line = io::stdin().read_line();
         history.push(copy(cmd_line));
-        // check &, background?
         let mut bg_flag = false;
         let amp_pos = cmd_line.find('&');
         if amp_pos != None {

@@ -160,25 +160,46 @@ Modify the zhtta code to implement your preferred scheduling (in user space but 
 
 ## C10k problem
 
+An important measure of performance for a web server is how many concurrent connections it can handle. The [C10K problem](http://en.wikipedia.org/wiki/C10k_problem)
+has been addressed by several modern web servers, including [nginx](http://en.wikipedia.org/wiki/Nginx) and [Microsoft IIS](http://en.wikipedia.org/wiki/Internet_Information_Services). 
+
 <div class="problem">
 <b>Problem 5.</b>
 <br>
-Use an existing tool to test and compare the performance of zhtta and zhttpto. Is there any improvement on performance? Why?
+Use an existing tool to test and compare the performance of zhtta and zhttpto. Can you explain any difference in performance? For an example of a tool to measure performance, you can look
+at [Apache Benchmark](http://httpd.apache.org/docs/2.2/programs/ab.html).
+
 </div>
 
 
 ## GASH in zhtta (Optional)
 
+Web servers like Apache offer the ability to run shell commands embedded in the web page.
+For example, using [Apache Server-side Includes](http://httpd.apache.org/docs/current/howto/ssi.html),
+you can put the following string in an HTML document to display the current date and time:
+
+```text
+<!--#exec cmd="date" -->
+```
+
+This is done by passing the commands embedded in the page to a shell to execute, and
+then replacing the SSI tag with the result.
+
 <div class="problem">
 <b>Problem 4.</b> (modify <span class="file">zhtta.rs</span>)
 <br>
-Modify the zhtta code to integrate gash in zhtta. You may use your own gash, or use that in PS2 reference solution. How would you schedule the connection to gash among other file requests?
+Modify the zhtta code to integrate gash in zhtta, to run commands embedded in HTML pages. You may use your own gash, or use that in PS2 reference solution. How would you schedule the connection to gash among other file requests?
 </div>
 
 
 ## White hat (Optional)
 
-'../../'
+<div class="problem">
+<b>Problem 4.</b> (modify <span class="file">zhtta.rs</span>)
+<br>
+Modify the zhtta code to protect against attacks.  For example, the code so far allows requests to any file path in the file system; for example, if zhtta is running in the '/home/user/zhtta' folder, a request to 'http://server/../../etc/shadow' would send the server's list of users to the requester.  Research other vulnerabities and address them in your implementation.
+</div>
+
 
 
 ### Submission and Demos

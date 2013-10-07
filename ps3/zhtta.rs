@@ -20,15 +20,15 @@ use std::io::println;
 use std::cell::Cell;
 use std::rt::test::*;
 use std::{os, str, io};
-use extra::sync::RWLock;
+use extra::arc;
 
 static PORT:    int = 4414;
 static IPV4_LOOPBACK: &'static str = "127.0.0.1";
-static mut visitor_count: uint = 0;
 
 
 fn main() {
-    let rwx: RWLock = RWLock::new();
+    let mut visitor_count: uint = 0;
+    let shared_visitor_count = arc::RWArc::new(visitor_count);
     
     let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
     
@@ -41,11 +41,12 @@ fn main() {
         println!("Saw connection!");
         let stream = Cell::new(stream);
         // Start a task to handle the connection
-        let rwx_task = rwx.clone();
+        let task_visitor_count = shared_visitor_count.clone();
         do spawntask_later {
-            do rwx_task.write {
-                unsafe { visitor_count += 1;}
+            do task_visitor_count.write |vc| {
+                *vc += 1;
             }
+            
             let mut stream = stream.take();
             let mut buf = [0, ..500];
             stream.read(buf);
@@ -69,7 +70,7 @@ fn main() {
                          <body>
                          <h1>Greetings, Krusty!</h1>
                          <h2>Visitor count: %u</h2>
-                         </body></html>\r\n", do rwx_task.read { unsafe{visitor_count}});
+                         </body></html>\r\n", do task_visitor_count.write |vc| {*vc});
 
                     stream.write(response.as_bytes());
                 }

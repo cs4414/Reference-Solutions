@@ -18,7 +18,6 @@ use std::rt::io::*;
 use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
 use std::io::println;
 use std::cell::Cell;
-use std::rt::test::*;
 use std::{os, str, io};
 use extra::arc;
 use std::comm::*;
@@ -41,7 +40,7 @@ fn main() {
     let chan = SharedChan::new(chan);
     
     // add file requests into queue.
-    do spawntask_later {
+    do spawn {
         while(true) {
             do add_vec.write |vec| {
                 let tf:sched_msg = port.recv();
@@ -52,7 +51,7 @@ fn main() {
     }
     
     // take file requests from queue, and send a response.
-    do spawntask_later {
+    do spawn {
         while(true) {
             do take_vec.write |vec| {
                 let mut tf = (*vec).pop();
@@ -85,7 +84,7 @@ fn main() {
         // Start a task to handle the connection
         let task_visitor_count = shared_visitor_count.clone();
         let child_chan = chan.clone();
-        do spawntask_later {
+        do spawn {
             do task_visitor_count.write |vc| {
                 *vc += 1;
             }

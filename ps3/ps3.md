@@ -87,5 +87,27 @@ A leap rom zhttpto to zhtta.
 Modify the zhtta code so it supports a safe visitor counter protected by RWLock.
 </div>
 
-##
+## Job scheduling methods
+
+<div class="problem">
+
+<b>Problem 2.</b> (modify <span class="file">answers.md</span>)
+<br>
+study several scheduling methods (round-robin, FIFO, LIFO, SPRT ...), and design your preferred connection scheduling policy.
+assume the bottleneck as network bandwidth
+1. file size - bytes sent
+2. server-client network connection bandwidth (could be inferred by IP address )
+</div>
+
+
+## Schedule web requests
+
+<div class="problem">
+
+<b>Problem 3.</b> (modify <span class="file">zhtta.rs</span>)
+<br>
+Modify the zhtta code to implement your preferred scheduling (in user space but not kernel). Please read the example of FILO before coding.
+</div>
+
+
 

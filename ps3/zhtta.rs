@@ -21,12 +21,54 @@ use std::cell::Cell;
 use std::rt::test::*;
 use std::{os, str, io};
 use extra::arc;
+use std::comm::*;
 
 static PORT:    int = 4414;
 static IPV4_LOOPBACK: &'static str = "127.0.0.1";
 
+struct sched_msg {
+    stream: Option<std::rt::io::net::tcp::TcpStream>,
+    filepath: ~std::path::PosixPath
+}
 
 fn main() {
+    let mut req_vec: ~[sched_msg] = ~[];
+    let shared_req_vec = arc::RWArc::new(req_vec);
+    let add_vec = shared_req_vec.clone();
+    let take_vec = shared_req_vec.clone();
+    
+    let (port, chan) = stream();
+    let chan = SharedChan::new(chan);
+    
+    // add file requests into queue.
+    do spawntask_later {
+        while(true) {
+            do add_vec.write |vec| {
+                let tf:sched_msg = port.recv();
+                (*vec).push(tf);
+                println("add to queue");
+            }
+        }
+    }
+    
+    // take file requests from queue, and send a response.
+    do spawntask_later {
+        while(true) {
+            do take_vec.write |vec| {
+                let mut tf = (*vec).pop();
+                
+                match io::read_whole_file(tf.filepath) {
+                    Ok(file_data) => {
+                        tf.stream.write(file_data);
+                    }
+                    Err(err) => {
+                        println(err);
+                    }
+                }
+            }
+        }
+    }
+
     let mut visitor_count: uint = 0;
     let shared_visitor_count = arc::RWArc::new(visitor_count);
     
@@ -42,6 +84,7 @@ fn main() {
         let stream = Cell::new(stream);
         // Start a task to handle the connection
         let task_visitor_count = shared_visitor_count.clone();
+        let child_chan = chan.clone();
         do spawntask_later {
             do task_visitor_count.write |vc| {
                 *vc += 1;
@@ -57,7 +100,7 @@ fn main() {
                 let path = req_group[1];
                 println(fmt!("Request for path: \n%?", path));
                 
-                let file_path = &os::getcwd().push(path.replace("/../", ""));
+                let file_path = ~os::getcwd().push(path.replace("/../", ""));
                 if !os::path_exists(file_path) || os::path_is_dir(file_path) {
                     println(fmt!("Request received:\n%s", request_str));
                     let response: ~str = fmt!(
@@ -76,16 +119,10 @@ fn main() {
                 }
                 else {
                     // may do scheduling here by file_path
+                    let msg: sched_msg = sched_msg{stream: stream, filepath: file_path.clone()};
+                    child_chan.send(msg);
                     
-                    println(fmt!("serve file: %?", file_path));
-                    match io::read_whole_file(file_path) {
-                        Ok(file_data) => {
-                            stream.write(file_data);
-                        }
-                        Err(err) => {
-                            println(err);
-                        }
-                    }
+                    println(fmt!("get file request: %?", file_path));
                 }
             }
             println!("connection terminates")

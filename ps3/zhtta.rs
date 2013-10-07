@@ -18,7 +18,6 @@ use std::rt::io::*;
 use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
 use std::io::println;
 use std::cell::Cell;
-use std::rt::test::*;
 use std::{os, str, io};
 use extra::arc;
 use std::comm::*;
@@ -32,7 +31,7 @@ struct sched_msg {
 }
 
 fn main() {
-    let mut req_vec: ~[sched_msg] = ~[];
+    let req_vec: ~[sched_msg] = ~[];
     let shared_req_vec = arc::RWArc::new(req_vec);
     let add_vec = shared_req_vec.clone();
     let take_vec = shared_req_vec.clone();
@@ -41,7 +40,7 @@ fn main() {
     let chan = SharedChan::new(chan);
     
     // add file requests into queue.
-    do spawntask_later {
+    do spawn {
         while(true) {
             do add_vec.write |vec| {
                 let tf:sched_msg = port.recv();
@@ -52,7 +51,7 @@ fn main() {
     }
     
     // take file requests from queue, and send a response.
-    do spawntask_later {
+    do spawn {
         while(true) {
             do take_vec.write |vec| {
                 let mut tf = (*vec).pop();
@@ -69,7 +68,7 @@ fn main() {
         }
     }
 
-    let mut visitor_count: uint = 0;
+    let visitor_count: uint = 0;
     let shared_visitor_count = arc::RWArc::new(visitor_count);
     
     let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
@@ -85,7 +84,7 @@ fn main() {
         // Start a task to handle the connection
         let task_visitor_count = shared_visitor_count.clone();
         let child_chan = chan.clone();
-        do spawntask_later {
+        do spawn {
             do task_visitor_count.write |vc| {
                 *vc += 1;
             }

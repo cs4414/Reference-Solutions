@@ -138,9 +138,9 @@ There're several academic papers about SRPT scheduling on web servers for your r
 
 Usually, the response time of a request depends on the size of requested file and the network connection condition between server and client. Network connection condition is another complicated topic, but it could be roughly inferred by IP address of clients in this assignment.
 
-For the next problem, you are required to implement a SPRT scheduling algorithm in zhtta. You don't need to implement a full version described by academic papers, but you are encouraged to do so.
+For the next problem, you are required to implement a SRPT scheduling algorithm in zhtta. You don't need to implement a full version described in academic papers, but you are encouraged to do so and even achieve a better one.
 
-In order to help you implement scheduling algorithm in Rust, we have provided a simple FILO scheduling in starting code as an example. You can find two extra tasks to do the scheduling. One is for queueing requests, while the other is responsible for getting requests from queue and send responses. 
+In order to help you implement scheduling algorithms in Rust, we have provided a simple FILO scheduling in starting code as an example. You can find two extra tasks in the code. One is for queueing requests, while the other is responsible for getting requests from queue and send responses. 
 
 
 <div class="problem">

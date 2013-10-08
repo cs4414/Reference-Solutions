@@ -84,14 +84,14 @@ You are not expected to build a better one in this assignment, but it's possible
 
 ## Taste the fresh Rust 0.8
 
-The latest Rust 0.8 has been released 10 days ago on Sep 26. [Rust 0.8 Released page](https://mail.mozilla.org/pipermail/rust-dev/2013-September/005804.html) We should upgrade our Rust environment to this latest version in PS3 for the numerous bugfixes since 0.7. Follwing this tutorial in [Piazza](https://piazza.com/class/hiuvlqlyk4925d?cid=64), you should be able to get Rust 0.8 work on your machine.
+The latest Rust 0.8 has been released 10 days ago on Sep 26. Here's the detailed webpage: [Rust 0.8 Released](https://mail.mozilla.org/pipermail/rust-dev/2013-September/005804.html) We should upgrade our Rust environment to this latest version in PS3 for the numerous bugfixes since 0.7. Follwing this tutorial in [Piazza](https://piazza.com/class/hiuvlqlyk4925d?cid=64), you should be able to get Rust 0.8 work on your machine.
 
 Unfortunetely, the 0.8 release also includes about 2200 changes in the language. Not surprisingly, your zhttpto code in PS1 couldn't run on Rust 0.8. But don't worry about that, we have provided a latest zhttpto written in Rust 0.8 in our [Github public repository of reference solutions](https://github.com/cs4414/Public-Reference-Solution). You could view this [commit diff page](https://github.com/cs4414/CS4414-Public-Reference-Solution/commit/0fe2e9ad165d01038a92656252f230f6f5013644) to experience the changes in Rust 0.8.
 
 As you can see from the diff page, several modules changed their paths, and the network-related API were totally rewritten. 
 
 
-## zhtta - 10^42 times better than zhttptos
+## zhtta - 10^42 times better than zhttpto
 
 In PS1, we have implemented a simple Web server named zhttpto. No matter how much grade you earned, however, it's far from an awesome Web server. With the help of Rust, zhttpto has got a good concurrency comparing the ancient web servers, but there still exists several obvious drawbacks. First, zhttpto uses an unsafe visitor counter in the code. What's worse, it exposes all of the files on your file system to web users. Moreover, it doesn't support advanced priority scheduling on the network requests. 
 
@@ -102,18 +102,18 @@ You will learn how to eliminate these drawbacks in this assignment and you might
 
 Visitor counter is one of the main features of zhtta, so we have no reason not to make it perfect. The most urgent challenge could be the concurrent access to the shared counter. 
 
-For the first problem, you are required to implement your own mutex mechanism and use it to manage the concurrent access to the visitor counter. 
+For the first problem, you are required to implement your own synchronization primitive and use it to manage the concurrent access to the shared visitor counter. 
 
 <div class="problem">
 
 <b>Problem 1.</b> (modify <span class="file">zhtta.rs</span>) 
 <br>
-Modify the zhtta code so it supports a safe visitor counter protected by Readers-writer Lock. You should implement your own mutex code. Referencing the API in Rust will only earn 20% of grade.
+Modify the zhtta code so it supports a safe visitor counter managed by Readers-writer Lock. You should implement your own mutex code. Referencing the API in Rust will only earn 20% of grade.
 </div>
 
 ## Scheduling strategies
 
-The world's first web server didn't meet the problem of requests scheduling because it could just accept a connection at a time. However, zhtta could accept thousands of http requests at a time and serve them concurrently. In this way, scheduling strategies may result in various performance.
+The world's first web server didn't meet the problem of requests scheduling because it could just accept a connection at a time. However, zhtta could accept thousands of http requests at a time and serve them concurrently. In this way, scheduling strategies may result in various performance both in terms of server side and in terms of client side.
 
 For the next problem, you are required to study several scheduling policies in detail.
 
@@ -121,32 +121,26 @@ For the next problem, you are required to study several scheduling policies in d
 
 <b>Problem 2.</b> (modify <span class="file">answers.md</span>)
 <br>
-Study several scheduling methods, such as round-robin, FIFO, FILO, SRPT, list their pros and cons respectively.
+Study several scheduling methods, such as round-robin, FIFO, FILO, SRPT, and list their pros and cons respectively.
 </div>
 
 
 ## SRPT Scheduling on web requests
 
-Shortest-Remaining-Processing-Time-First (SRPT) is a well-known preemtive scheduling algorithm in Web servers. By giving priority to 
+Shortest-Remaining-Processing-Time-First (SRPT) is a well-known preemtive scheduling algorithm in Web servers. By giving priority to short requests or those requests with short remaining time, the web server could achieve minimum average response time.
 
-assume the bottleneck as network bandwidth
-1. file size - bytes sent
-2. server-client network connection bandwidth (could be inferred by IP address )
+There're several academic papers about SRPT scheduling on web servers for your information.
 
+* Bianca Schroeder, Mor Harchol-Balter (CMU). Web servers under overload: How scheduling can help, 2002
+* Mor Harchol-Balter, et al (CMU). Size-based scheduling to improve web performance. ACM Transactions on Computer Systems, 21(2), May 2003.
+* Mayank Rawat, et al (UIC). SWIFT: Scheduling in web servers for fast reponse time. In Second IEEE International Symposium on Network Computing and Applications, April 2003.
 
-Rust uses a fair scheduling on concurrent tasks. 
+Usually, the response time of a request depends on the size of requested file and the network connection condition between server and client. Network connection condition is another complicated topic, but it could be roughly inferred by IP address of clients in this assignment. 
 
-For the next problem, you are required to implement a SPRT scheduling algorithm on http requests.
+For the next problem, you are required to implement a SPRT scheduling algorithm in zhtta. You don't need to implement a full version described by academic papers, but you are encouraged to do so.
 
-explain simple FILO scheduling example in starting code
+In order to help you implement scheduling algorithm in Rust, we provided a simple FILO scheduling in starting code as an example. 
 
-
-
-
-Reference: 
-[  ] Bianca Schroeder, Mor Harchol-Balter (CMU). Web servers under overload: How scheduling can help
-[31] Mor Harchol-Balter, et al (CMU). Size-based scheduling to improve web performance. ACM Transactions on Computer Systems, 21(2), May 2003.
-[54] Mayank Rawat, et al (UIC). SWIFT: Scheduling in web servers for fast reponse time. In Second IEEE International Symposium on Network Computing and Applications, April 2003.
 
 <div class="problem">
 <b>Problem 3.</b> (modify <span class="file">zhtta.rs</span>)
@@ -178,7 +172,7 @@ Modify the zhtta code to integrate gash in zhtta. You may use your own gash, or 
 
 ## White hat (Optional)
 
-'../../'
+how to fix '../../' vuln
 
 
 ### Submission and Demos

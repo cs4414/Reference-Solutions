@@ -2,7 +2,7 @@ Title: Problem Set 3
 Date: 2013-10-07
 Category: PS
 Tags: Problem Sets, Web Server
-Author: David Evans and Weilin Xu
+Author: David Evans and Weilin Xu and Purnam Jantrania
 Slug: ps3
 
 <div class="due">

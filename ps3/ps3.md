@@ -111,6 +111,7 @@ For the first problem, you are required to implement your own synchronization pr
 Modify the zhtta code so it supports a safe visitor counter managed by Readers-writer Lock. You should implement your own mutex code. Referencing the API in Rust will only earn 20% of grade.
 </div>
 
+
 ## Scheduling strategies
 
 The world's first web server didn't meet the problem of requests scheduling because it could just accept a connection at a time. However, zhtta could accept thousands of http requests at a time and serve them concurrently. In this way, scheduling strategies may result in various performance both in terms of server side and in terms of client side.
@@ -147,9 +148,6 @@ In order to help you implement scheduling algorithm in Rust, we have provided a 
 <br>
 Modify the zhtta code to implement your SRPT scheduling (in user space but not kernel). Please read the example of FILO before coding.
 </div>
-
-
-
 
 
 ## C10k problem
@@ -191,7 +189,7 @@ Modify the zhtta code to integrate gash in zhtta, to run commands embedded in HT
 <div class="problem">
 <b>Problem 4.</b> (modify <span class="file">zhtta.rs</span>)
 <br>
-Modify the zhtta code to protect against attacks.  For example, the code so far allows requests to any file path in the file system; for example, if zhtta is running in the '/home/user/zhtta' folder, a request to 'http://server/../../etc/shadow' would send the server's list of users to the requester.  Research other vulnerabities and address them in your implementation.
+Modify the zhtta code to protect against attacks.  For example, most students' code in PS1 allows requests to any file path in the file system; for example, if zhttpto is running in the '/home/user/ps1' folder, a request to 'http://DOMAIN/../../../etc/shadow' would send the server's list of users to the requester. We have a simple patch in the PS1 reference solution, but it's still exploitable. Research the vulnerabities and address them in your implementation.
 </div>
 
 

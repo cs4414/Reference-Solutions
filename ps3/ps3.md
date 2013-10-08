@@ -129,23 +129,23 @@ Study several scheduling methods, such as round-robin, FIFO, FILO, SRPT, and lis
 
 Shortest-Remaining-Processing-Time-First (SRPT) is a well-known preemtive scheduling algorithm in Web servers. By giving priority to short requests or those requests with short remaining time, the web server could achieve minimum average response time.
 
-There're several academic papers about SRPT scheduling on web servers for your information.
+There're several academic papers about SRPT scheduling on web servers for your reference.
 
 * Bianca Schroeder, Mor Harchol-Balter (CMU). Web servers under overload: How scheduling can help, 2002
 * Mor Harchol-Balter, et al (CMU). Size-based scheduling to improve web performance. ACM Transactions on Computer Systems, 21(2), May 2003.
 * Mayank Rawat, et al (UIC). SWIFT: Scheduling in web servers for fast reponse time. In Second IEEE International Symposium on Network Computing and Applications, April 2003.
 
-Usually, the response time of a request depends on the size of requested file and the network connection condition between server and client. Network connection condition is another complicated topic, but it could be roughly inferred by IP address of clients in this assignment. 
+Usually, the response time of a request depends on the size of requested file and the network connection condition between server and client. Network connection condition is another complicated topic, but it could be roughly inferred by IP address of clients in this assignment.
 
 For the next problem, you are required to implement a SPRT scheduling algorithm in zhtta. You don't need to implement a full version described by academic papers, but you are encouraged to do so.
 
-In order to help you implement scheduling algorithm in Rust, we provided a simple FILO scheduling in starting code as an example. 
+In order to help you implement scheduling algorithm in Rust, we have provided a simple FILO scheduling in starting code as an example. You can find two extra tasks to do the scheduling. One is for queueing requests, while the other is responsible for getting requests from queue and send responses. 
 
 
 <div class="problem">
 <b>Problem 3.</b> (modify <span class="file">zhtta.rs</span>)
 <br>
-Modify the zhtta code to implement your preferred scheduling (in user space but not kernel). Please read the example of FILO before coding.
+Modify the zhtta code to implement your SRPT scheduling (in user space but not kernel). Please read the example of FILO before coding.
 </div>
 
 

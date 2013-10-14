@@ -15,7 +15,7 @@
 extern mod extra;
 
 use std::rt::io::*;
-use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
+use std::rt::io::net::ip::SocketAddr;
 use std::io::println;
 use std::cell::Cell;
 use std::{os, str, io};
@@ -71,9 +71,12 @@ fn main() {
     let visitor_count: uint = 0;
     let shared_visitor_count = arc::RWArc::new(visitor_count);
     
-    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
+    let ip_opt: Option<IpAddr> = FromStr::from_str(IPV4_LOOPBACK);
+    let ip = ip_opt.unwrap();
     
-    println(fmt!("Listening on tcp port %d ...", PORT));
+    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: ip, port: PORT as u16});
+    
+    println(fmt!("Listening on %s:%d ...", ip.to_str(), PORT));
     let mut acceptor = socket.listen().unwrap();
     
     // we can limit the incoming connection count.

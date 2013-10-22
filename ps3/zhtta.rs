@@ -119,19 +119,6 @@ fn main() {
     let chan = SharedChan::new(chan);
     
     // add file requests into queue.
-    /*
-    do spawn {
-        loop {
-            do add_sched.write |sched| {
-                while (port.peek()) {
-                    let sm: sched_msg = port.recv();
-                    sched.add_sched_msg(sm);
-                    println("add to queue");
-                }
-            }
-        }
-    }*/
-    
     do spawn {
         let (sm_port, sm_chan) = stream();
         loop {
@@ -156,9 +143,9 @@ fn main() {
     
     // take file requests from queue, and send a response.
     // take response
+    // unknown function in the scope will block the whole thread, so use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
         let (sm_port, sm_chan) = stream();
-        //let sm_chan = SharedChan::new(sm_chan);
         loop {
             //println("lock for getting sm");
             do do_sched.write |sched| {
@@ -175,11 +162,8 @@ fn main() {
                 match io::read_whole_file(sm.file_path) {
                     Ok(file_data) => {
                         println(fmt!("begin serving file [%?]", sm.file_path));
-                        //println(fmt!("%?", file_data));
-                        
                         //sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
                         sm.stream.write(file_data);
-                        //do task::spawn_with(sm) |mut sm: sched_msg| {}
                         println("finish serving");
                     }
                     Err(err) => {
@@ -244,7 +228,6 @@ fn main() {
                     //println!("get file request: {:?}", file_path);
                     let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone()};
                     child_chan.send(msg);
-                    //println!("sent to port.");
                     
                 }
             }

@@ -15,7 +15,7 @@
 extern mod extra;
 
 use std::rt::io::*;
-use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
+use std::rt::io::net::ip::SocketAddr;
 use std::io::println;
 use std::cell::Cell;
 use std::{os, str, io};
@@ -23,7 +23,7 @@ use extra::arc;
 use std::comm::*;
 
 static PORT:    int = 4414;
-static IPV4_LOOPBACK: &'static str = "127.0.0.1";
+static IP: &'static str = "0.0.0.0";
 static mut visitor_count: uint = 0;
 
 struct sched_msg {
@@ -79,7 +79,12 @@ fn main() {
         }
     }
     
-    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(0,0,0,0), port: PORT as u16});
+    let ip = match FromStr::from_str(IP) { Some(ip) => ip, 
+                                           None => { println(fmt!("Error: Invalid IP address <%s>", IP));
+                                                     return;},
+                                         };
+                                         
+    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: ip, port: PORT as u16});
     
     println(fmt!("Listening on tcp port %d ...", PORT));
     let mut acceptor = socket.listen().unwrap();

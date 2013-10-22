@@ -42,9 +42,8 @@ fn main() {
     
     // add file requests into queue.
     do spawn {
-        while(true) {
+        loop {
             do add_vec.write |vec| {
-                //println("add_vec");
                 if (port.peek()) {
                     let tf:sched_msg = port.recv();
                     (*vec).push(tf);
@@ -57,31 +56,17 @@ fn main() {
     // take file requests from queue, and send a response.
     // FIFO
     do spawn {
-        while(true) {
+        loop {
             do take_vec.write |vec| {
-                //println("take_vec");
                 if ((*vec).len() > 0) {
                     let tf_opt: Option<sched_msg> = (*vec).shift_opt();
                     let mut tf = tf_opt.unwrap();
-                    println(fmt!("pop from queue, size: %ud", (*vec).len()));
-                    /*
-                    println(fmt!("serve large file: "));
-                    
-                    let mut buf: ~[u8];
-                    let buf_len: uint = 100*1024;
-                    let mut file_reader = io::file_reader(tf.filepath).unwrap();
-                    while true {
-                        buf = file_reader.read_bytes(buf_len);
-                        if (!buf.is_empty()) {
-                            tf.stream.write(buf);
-                        } else { break;}
-                    }*/
-                    
-            
+                    println(fmt!("shift from queue, size: %ud", (*vec).len()));
 
                     match io::read_whole_file(tf.filepath) { // killed if file size is larger than memory size.
                         Ok(file_data) => {
                             println(fmt!("begin serving file [%?]", tf.filepath));
+                            tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
                             tf.stream.write(file_data);
                             println(fmt!("finish file [%?]", tf.filepath));
                         }

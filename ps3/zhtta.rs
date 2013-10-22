@@ -124,6 +124,10 @@ fn main() {
     // take file requests from queue, and send a response.
     // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
+        let cached_file_path = ~os::getcwd().push("80M.bin");
+        let cached_file_data = io::read_whole_file(cached_file_path).unwrap();
+        
+        
         let (sm_port, sm_chan) = stream();
         loop {
             //println("lock for getting sm");
@@ -138,17 +142,28 @@ fn main() {
             if (sm_port.peek()) {
                 //println("get sm from queue");
                 let mut sm = sm_port.recv();
-                match io::read_whole_file(sm.file_path) {
-                    Ok(file_data) => {
-                        println(fmt!("begin serving file [%?]", sm.file_path));
-                        //sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
-                        sm.stream.write(file_data);
-                        println("finish serving");
-                    }
-                    Err(err) => {
-                        println(err);
+                
+                if (sm.file_path == cached_file_path) {
+                    println(fmt!("begin serving cached file [%?]", sm.file_path));
+                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                    sm.stream.write(cached_file_data);
+                    println("finish serving");
+                } else {
+                    match io::read_whole_file(sm.file_path) {
+                        Ok(file_data) => {
+                            println(fmt!("begin serving file [%?]", sm.file_path));
+                            sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                            sm.stream.write(file_data);
+                            println("finish serving");
+                        }
+                        Err(err) => {
+                            println(err);
+                        }
                     }
                 }
+                
+                
+                
             } else {
                 //println("no sm at all");
             }

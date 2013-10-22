@@ -3,14 +3,14 @@
 //
 // Running on Rust 0.8
 //
-// Reference solution for PS3
+// Starting code for PS3
 // 
 // Note: it would be very unwise to run this server on a machine that is
 // on the Internet and contains any sensitive files!
 //
 // University of Virginia - cs4414 Fall 2013
 // Weilin Xu and David Evans
-// Version 0.1
+// Version 0.2
 
 extern mod extra;
 
@@ -44,6 +44,8 @@ fn main() {
     do spawn {
         loop {
             do add_vec.write |vec| {
+                // port.recv() will block the code and keep locking the RWArc, so we simply use peek() to check if there's message to recv.
+                // But a asynchronous solution will be much better.
                 if (port.peek()) {
                     let tf:sched_msg = port.recv();
                     (*vec).push(tf);
@@ -59,6 +61,7 @@ fn main() {
         loop {
             do take_vec.write |vec| {
                 if ((*vec).len() > 0) {
+                    // FILO didn't make sense in service scheduling, so we modify it as FIFO by using shift_opt() rather than pop().
                     let tf_opt: Option<sched_msg> = (*vec).shift_opt();
                     let mut tf = tf_opt.unwrap();
                     println(fmt!("shift from queue, size: %ud", (*vec).len()));
@@ -66,6 +69,7 @@ fn main() {
                     match io::read_whole_file(tf.filepath) { // killed if file size is larger than memory size.
                         Ok(file_data) => {
                             println(fmt!("begin serving file [%?]", tf.filepath));
+                            // A web server should always reply a HTTP header for any legal HTTP request.
                             tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
                             tf.stream.write(file_data);
                             println(fmt!("finish file [%?]", tf.filepath));

@@ -3,7 +3,7 @@
 //
 // Running on Rust 0.8
 //
-// Reference solution for PS3
+// Starting code for PS3
 // 
 // Note: it would be very unwise to run this server on a machine that is
 // on the Internet and contains any sensitive files!
@@ -15,50 +15,89 @@
 extern mod extra;
 
 use std::rt::io::*;
-use std::rt::io::net::ip::SocketAddr;
+use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
 use std::io::println;
 use std::cell::Cell;
 use std::{os, str, io};
-use extra::arc;
 use std::comm::*;
+use std::cmp::Ord;
+use extra::arc;
+use extra::priority_queue::PriorityQueue;
+use std::task;
+use extra::sync;
 
 static PORT:    int = 4414;
-static IPV4_LOOPBACK: &'static str = "127.0.0.1";
+static IPV4_LOOPBACK: IpAddr = Ipv4Addr(0,0,0,0);
+static visitor_count: uint = 0u;
+
+static LEVEL1: u64 = 1024000;//1MB
+static LEVEL2: u64 = 15360000;//15MB
+static LEVEL3: u64 = 25600000;//25MB
+static LEVEL4: u64 = 56320000;//55MB
 
 struct sched_msg {
+    priority: uint,
     stream: Option<std::rt::io::net::tcp::TcpStream>,
-    filepath: ~std::path::PosixPath
+    file_path: ~std::path::PosixPath
 }
 
-fn main() {
-    let req_vec: ~[sched_msg] = ~[];
-    let shared_req_vec = arc::RWArc::new(req_vec);
-    let add_vec = shared_req_vec.clone();
-    let take_vec = shared_req_vec.clone();
-    
-    let (port, chan) = stream();
-    let chan = SharedChan::new(chan);
-    
-    // add file requests into queue.
-    do spawn {
-        while(true) {
-            do add_vec.write |vec| {
-                let tf:sched_msg = port.recv();
-                (*vec).push(tf);
-                println("add to queue");
-            }
-        }
+impl Ord for sched_msg {
+    fn lt(&self, other: &sched_msg) -> bool {
+        if self.priority > other.priority { true } else { false }
     }
-    
-    // take file requests from queue, and send a response.
-    do spawn {
-        while(true) {
-            do take_vec.write |vec| {
-                let mut tf = (*vec).pop();
-                
-                match io::read_whole_file(tf.filepath) {
+}
+
+struct Scheduler(PriorityQueue<sched_msg>);
+
+impl Scheduler {
+    fn new() -> Scheduler { 
+        Scheduler(PriorityQueue::new())
+    }
+
+    fn add_sched_msg(&mut self, mut sm: sched_msg) {
+        let file_size = match file::open(sm.file_path, Open, Read) {
+            Some(filestream) => {
+                let mut fs = filestream;
+                fs.seek(0, SeekEnd);
+                fs.tell()
+            }
+            None => 0
+        };
+        let mut priority = if file_size < LEVEL1 { 10 } 
+                           else if file_size < LEVEL2 { 20 }
+                           else if file_size < LEVEL3 { 30 }
+                           else if file_size < LEVEL4 { 40 }
+                           else { 50 };
+
+        let ip_s = match sm.stream {
+            Some(ref mut stream) => {
+                match stream.peer_name() {
+                    Some(pn) => pn.ip.to_str(),
+                    None => "0".to_owned()
+                }
+            }
+            None => "0".to_owned()
+        };
+        if !(ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.")
+                                          || ip_s.starts_with("50.134.")) {
+            priority += 5;
+        }
+        sm.priority = priority;
+        self.push(sm);
+    }
+
+
+
+    fn do_task(&mut self) {
+        match self.maybe_pop() {
+            None => { /* do nothing */ }
+            Some(sm) => {
+                let mut sm = sm;
+                match io::read_whole_file(sm.file_path) {
                     Ok(file_data) => {
-                        tf.stream.write(file_data);
+                        println(fmt!("begin serving file [%?]", sm.file_path));
+                        sm.stream.write(file_data);
+                        //do task::spawn_with(sm) |mut sm: sched_msg| {sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());}
                     }
                     Err(err) => {
                         println(err);
@@ -67,30 +106,109 @@ fn main() {
             }
         }
     }
+}
 
-    let visitor_count: uint = 0;
-    let shared_visitor_count = arc::RWArc::new(visitor_count);
+fn main() {
+    let sched = Scheduler::new();
+    let add_sched = arc::RWArc::new(sched);
+    let do_sched = add_sched.clone();
+
+    let shared_v_count = arc::RWArc::new(visitor_count);
     
-    let ip_opt: Option<IpAddr> = FromStr::from_str(IPV4_LOOPBACK);
-    let ip = ip_opt.unwrap();
+    let (port, chan) = stream();
+    let chan = SharedChan::new(chan);
     
-    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: ip, port: PORT as u16});
+    // add file requests into queue.
+    /*
+    do spawn {
+        loop {
+            do add_sched.write |sched| {
+                while (port.peek()) {
+                    let sm: sched_msg = port.recv();
+                    sched.add_sched_msg(sm);
+                    println("add to queue");
+                }
+            }
+        }
+    }*/
     
-    println(fmt!("Listening on %s:%d ...", ip.to_str(), PORT));
+    do spawn {
+        let (sm_port, sm_chan) = stream();
+        loop {
+            //println("wait for sm from chan.");
+            let sm: sched_msg = port.recv();
+            //println("get sm from port.");
+            sm_chan.send(sm);
+            do add_sched.write |sched| {
+                let sm = sm_port.recv();
+                sched.add_sched_msg(sm);
+                println("add to queue");
+                while (port.peek()) {
+                    let sm: sched_msg = port.recv();
+                    sched.add_sched_msg(sm);
+                    println("add more to queue");
+                }
+            }
+        }
+    }
+
+
+    
+    // take file requests from queue, and send a response.
+    // take response
+    do task::spawn_sched(task::SingleThreaded) {
+        let (sm_port, sm_chan) = stream();
+        //let sm_chan = SharedChan::new(sm_chan);
+        loop {
+            //println("lock for getting sm");
+            do do_sched.write |sched| {
+                match sched.maybe_pop() {
+                    None => { /* do nothing */ }
+                    Some(sm) => {sm_chan.send(sm);}
+                }
+            }
+            //println("unlock for getting sm");
+            
+            if (sm_port.peek()) {
+                //println("get sm from queue");
+                let mut sm = sm_port.recv();
+                match io::read_whole_file(sm.file_path) {
+                    Ok(file_data) => {
+                        println(fmt!("begin serving file [%?]", sm.file_path));
+                        //println(fmt!("%?", file_data));
+                        
+                        //sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
+                        sm.stream.write(file_data);
+                        //do task::spawn_with(sm) |mut sm: sched_msg| {}
+                        println("finish serving");
+                    }
+                    Err(err) => {
+                        println(err);
+                    }
+                }
+            } else {
+                //println("no sm at all");
+            }
+        }
+    }
+    
+    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: IPV4_LOOPBACK, port: PORT as u16});
+    
+    println!("Listening on tcp port {} ...", PORT);
     let mut acceptor = socket.listen().unwrap();
     
     // we can limit the incoming connection count.
     //for stream in acceptor.incoming().take(10 as uint) {
     for stream in acceptor.incoming() {
-        println!("Saw connection!");
         let stream = Cell::new(stream);
-        // Start a task to handle the connection
-        let task_visitor_count = shared_visitor_count.clone();
+        
+        // Start a new task to handle the connection
         let child_chan = chan.clone();
+        let inc_v_count = shared_v_count.clone();
         do spawn {
-            do task_visitor_count.write |vc| {
-                *vc += 1;
-            }
+            do inc_v_count.write |v_count| {
+                *v_count += 1;
+            }  
             
             let mut stream = stream.take();
             let mut buf = [0, ..500];
@@ -100,34 +218,37 @@ fn main() {
             let req_group : ~[&str]= request_str.splitn_iter(' ', 3).collect();
             if req_group.len() > 2 {
                 let path = req_group[1];
-                println(fmt!("Request for path: \n%?", path));
+                //println!("Request for path: \n{}", path);
                 
                 let file_path = ~os::getcwd().push(path.replace("/../", ""));
                 if !os::path_exists(file_path) || os::path_is_dir(file_path) {
-                    println(fmt!("Request received:\n%s", request_str));
-                    let response: ~str = fmt!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
-                         <doctype !html><html><head><title>Hello, Rust!</title>
-                         <style>body { background-color: #111; color: #FFEEAA }
-                                h1 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red}
-                                h2 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green}
-                         </style></head>
-                         <body>
-                         <h1>Greetings, Krusty!</h1>
-                         <h2>Visitor count: %u</h2>
-                         </body></html>\r\n", do task_visitor_count.write |vc| {*vc});
+                    //println!("Request received:\n{}", request_str);
+                    do inc_v_count.read |&v_count| {
+                        let response: ~str = fmt!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
+                             <doctype !html><html><head><title>Hello, Rust!</title>
+                             <style>body { background-color: #111; color: #FFEEAA }
+                                    h1 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red}
+                                    h2 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green}
+                             </style></head>
+                             <body>
+                             <h1>Greetings, Krusty!</h1>
+                             <h2>Visitor count: %u</h2>
+                             </body></html>\r\n", v_count);
 
-                    stream.write(response.as_bytes());
+                        stream.write(response.as_bytes());
+                    }
                 }
                 else {
-                    // may do scheduling here by file_path
-                    let msg: sched_msg = sched_msg{stream: stream, filepath: file_path.clone()};
+                    // may do scheduling here
+                    //println!("get file request: {:?}", file_path);
+                    let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone()};
                     child_chan.send(msg);
+                    //println!("sent to port.");
                     
-                    println(fmt!("get file request: %?", file_path));
                 }
             }
-            println!("connection terminates")
+            //println!("connection terminates")
         }
     }
 }

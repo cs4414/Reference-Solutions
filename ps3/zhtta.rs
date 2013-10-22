@@ -124,13 +124,15 @@ fn main() {
     // take file requests from queue, and send a response.
     // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
+        // simple caching for large file.
+        // TODO: smart caching on requested files.
         let cached_file_path = ~os::getcwd().push("80M.bin");
         let cached_file_data = io::read_whole_file(cached_file_path).unwrap();
-        
         
         let (sm_port, sm_chan) = stream();
         loop {
             //println("lock for getting sm");
+            // TODO: add chan,port here to avoid busy checking
             do do_sched.write |sched| {
                 match sched.maybe_pop() {
                     None => { /* do nothing */ }
@@ -161,6 +163,20 @@ fn main() {
                         }
                     }
                 }
+                
+                // TODO: read_whole_stream() should be replaced by reading small chunks.
+                /*
+                    println(fmt!("serve large file: "));
+                    
+                    let mut buf: ~[u8];
+                    let buf_len: uint = 100*1024;
+                    let mut file_reader = io::file_reader(tf.filepath).unwrap();
+                    while true {
+                        buf = file_reader.read_bytes(buf_len);
+                        if (!buf.is_empty()) {
+                            tf.stream.write(buf);
+                        } else { break;}
+                    }*/
                 
                 
                 

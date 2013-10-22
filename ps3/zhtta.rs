@@ -86,26 +86,6 @@ impl Scheduler {
         self.push(sm);
     }
 
-
-
-    fn do_task(&mut self) {
-        match self.maybe_pop() {
-            None => { /* do nothing */ }
-            Some(sm) => {
-                let mut sm = sm;
-                match io::read_whole_file(sm.file_path) {
-                    Ok(file_data) => {
-                        println(fmt!("begin serving file [%?]", sm.file_path));
-                        sm.stream.write(file_data);
-                        //do task::spawn_with(sm) |mut sm: sched_msg| {sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());}
-                    }
-                    Err(err) => {
-                        println(err);
-                    }
-                }
-            }
-        }
-    }
 }
 
 fn main() {
@@ -142,8 +122,7 @@ fn main() {
 
     
     // take file requests from queue, and send a response.
-    // take response
-    // unknown function in the scope will block the whole thread, so use a new scheduler to create this task.
+    // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
         let (sm_port, sm_chan) = stream();
         loop {

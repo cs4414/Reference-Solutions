@@ -98,52 +98,22 @@ fn main() {
     let (port, chan) = stream();
     let chan = SharedChan::new(chan);
     
-    // add file requests into queue.
-    do spawn {
-        let (sm_port, sm_chan) = stream();
-        loop {
-            //println("wait for sm from chan.");
-            let sm: sched_msg = port.recv();
-            //println("get sm from port.");
-            sm_chan.send(sm);
-            do add_sched.write |sched| {
-                let sm = sm_port.recv();
-                sched.add_sched_msg(sm);
-                println("add to queue");
-                while (port.peek()) {
-                    let sm: sched_msg = port.recv();
-                    sched.add_sched_msg(sm);
-                    println("add more to queue");
-                }
-            }
-        }
-    }
-
-
-    
     // take file requests from queue, and send a response.
     // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
         // simple caching for large file.
         // TODO: smart caching on requested files.
-        let cached_file_path = ~os::getcwd().push("80M.bin");
+        let cached_file_path = ~os::getcwd().push("zhtta");
         let cached_file_data = io::read_whole_file(cached_file_path).unwrap();
         
         let (sm_port, sm_chan) = stream();
-        loop {
-            //println("lock for getting sm");
-            // TODO: add chan,port here to avoid busy checking
-            do do_sched.write |sched| {
-                match sched.maybe_pop() {
-                    None => { /* do nothing */ }
-                    Some(sm) => {sm_chan.send(sm);}
-                }
-            }
-            //println("unlock for getting sm");
-            
-            if (sm_port.peek()) {
-                //println("get sm from queue");
-                let mut sm = sm_port.recv();
+        
+        
+        // response the request
+        // multiple tasks may help to utilize the network bandwidth.
+        do spawn {
+            loop {
+                let mut sm: sched_msg = sm_port.recv();
                 
                 if (sm.file_path == cached_file_path) {
                     println(fmt!("begin serving cached file [%?]", sm.file_path));
@@ -163,26 +133,33 @@ fn main() {
                         }
                     }
                 }
-                
-                // TODO: read_whole_stream() should be replaced by reading small chunks.
-                /*
-                    println(fmt!("serve large file: "));
-                    
-                    let mut buf: ~[u8];
-                    let buf_len: uint = 100*1024;
-                    let mut file_reader = io::file_reader(tf.filepath).unwrap();
-                    while true {
-                        buf = file_reader.read_bytes(buf_len);
-                        if (!buf.is_empty()) {
-                            tf.stream.write(buf);
-                        } else { break;}
-                    }*/
-                
-                
-                
-            } else {
-                //println("no sm at all");
             }
+            
+            // TODO: read_whole_stream() should be replaced by reading small chunks.
+            /*
+                println(fmt!("serve large file: "));
+                
+                let mut buf: ~[u8];
+                let buf_len: uint = 100*1024;
+                let mut file_reader = io::file_reader(tf.filepath).unwrap();
+                while true {
+                    buf = file_reader.read_bytes(buf_len);
+                    if (!buf.is_empty()) {
+                        tf.stream.write(buf);
+                    } else { break;}
+                }*/
+        }
+        
+        loop {
+            port.recv(); // wait for requests
+            // pop request from queue
+            do do_sched.write |sched| {
+                match sched.maybe_pop() {
+                    None => { /* do nothing */ }
+                    Some(sm) => {sm_chan.send(sm);}
+                }
+            }
+
         }
     }
     
@@ -199,6 +176,7 @@ fn main() {
         // Start a new task to handle the connection
         let child_chan = chan.clone();
         let inc_v_count = shared_v_count.clone();
+        let child_add_sched = add_sched.clone();
         do spawn {
             do inc_v_count.write |v_count| {
                 *v_count += 1;
@@ -236,9 +214,17 @@ fn main() {
                 else {
                     // may do scheduling here
                     //println!("get file request: {:?}", file_path);
+                    // add file requests into queue.
                     let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone()};
-                    child_chan.send(msg);
+                    let (sm_port, sm_chan) = std::comm::stream();
+                    sm_chan.send(msg);
                     
+                    do child_add_sched.write |sched| {
+                        let msg = sm_port.recv();
+                        sched.add_sched_msg(msg);
+                        println("add to queue");
+                    }
+                    child_chan.send(""); //notify the new request in queue.
                 }
             }
             //println!("connection terminates")

@@ -44,32 +44,57 @@ fn main() {
     do spawn {
         while(true) {
             do add_vec.write |vec| {
-                let tf:sched_msg = port.recv();
-                (*vec).push(tf);
-                println("add to queue");
-            }
-        }
-    }
-    
-    // take file requests from queue, and send a response.
-    do spawn {
-        while(true) {
-            do take_vec.write |vec| {
-                let mut tf = (*vec).pop();
-                
-                match io::read_whole_file(tf.filepath) {
-                    Ok(file_data) => {
-                        tf.stream.write(file_data);
-                    }
-                    Err(err) => {
-                        println(err);
-                    }
+                //println("add_vec");
+                if (port.peek()) {
+                    let tf:sched_msg = port.recv();
+                    (*vec).push(tf);
+                    println(fmt!("add to queue, size: %ud", (*vec).len()));
                 }
             }
         }
     }
     
-    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
+    // take file requests from queue, and send a response.
+    // FIFO
+    do spawn {
+        while(true) {
+            do take_vec.write |vec| {
+                //println("take_vec");
+                if ((*vec).len() > 0) {
+                    let tf_opt: Option<sched_msg> = (*vec).shift_opt();
+                    let mut tf = tf_opt.unwrap();
+                    println(fmt!("pop from queue, size: %ud", (*vec).len()));
+                    /*
+                    println(fmt!("serve large file: "));
+                    
+                    let mut buf: ~[u8];
+                    let buf_len: uint = 100*1024;
+                    let mut file_reader = io::file_reader(tf.filepath).unwrap();
+                    while true {
+                        buf = file_reader.read_bytes(buf_len);
+                        if (!buf.is_empty()) {
+                            tf.stream.write(buf);
+                        } else { break;}
+                    }*/
+                    
+            
+
+                    match io::read_whole_file(tf.filepath) { // killed if file size is larger than memory size.
+                        Ok(file_data) => {
+                            println(fmt!("begin serving file [%?]", tf.filepath));
+                            tf.stream.write(file_data);
+                            println(fmt!("finish file [%?]", tf.filepath));
+                        }
+                        Err(err) => {
+                            println(err);
+                        }
+                    } 
+                }
+            }
+        }
+    }
+    
+    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(0,0,0,0), port: PORT as u16});
     
     println(fmt!("Listening on tcp port %d ...", PORT));
     let mut acceptor = socket.listen().unwrap();
@@ -117,6 +142,7 @@ fn main() {
                     // may do scheduling here
                     let msg: sched_msg = sched_msg{stream: stream, filepath: file_path.clone()};
                     child_chan.send(msg);
+                    
                     
                     println(fmt!("get file request: %?", file_path));
                 }

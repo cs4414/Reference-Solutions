@@ -121,33 +121,20 @@ fn main() {
                     sm.stream.write(cached_file_data);
                     println("finish serving");
                 } else {
-                    match io::read_whole_file(sm.file_path) {
-                        Ok(file_data) => {
-                            println(fmt!("begin serving file [%?]", sm.file_path));
-                            sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                            sm.stream.write(file_data);
-                            println("finish serving");
-                        }
-                        Err(err) => {
-                            println(err);
+                    println(fmt!("begin serving file [%?]", sm.file_path));
+                    let mut buf = [0, .. 40960];
+                    let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                    
+                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                    while (!file_reader.eof()) {
+                        match file_reader.read(buf) {
+                            Some(len) => {sm.stream.write(buf.slice(0, len));}
+                            None => {}
                         }
                     }
+                    println("finish serving");
                 }
             }
-            
-            // TODO: read_whole_stream() should be replaced by reading small chunks.
-            /*
-                println(fmt!("serve large file: "));
-                
-                let mut buf: ~[u8];
-                let buf_len: uint = 100*1024;
-                let mut file_reader = io::file_reader(tf.filepath).unwrap();
-                while true {
-                    buf = file_reader.read_bytes(buf_len);
-                    if (!buf.is_empty()) {
-                        tf.stream.write(buf);
-                    } else { break;}
-                }*/
         }
         
         loop {

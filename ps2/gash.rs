@@ -37,8 +37,9 @@ fn handle_cmd(cmd_line: &str, pipe_in: libc::c_int, pipe_out: libc::c_int, pipe_
     let mut argv: ~[~str] =
         cmd_line.split_iter(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
     let mut i = 0;
-    // found problem on background redirection, io buffer wasn't flushed when terminating?
+    // found problem on redirection
     // `ping google.com | grep 1 > ping.txt &` didn't work
+    // because grep won't flush the buffer when terminated not by SIGINT.
     while (i < argv.len()) {
         if (argv[i] == ~">") {
             argv.remove(i);

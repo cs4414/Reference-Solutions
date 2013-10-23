@@ -24,10 +24,9 @@ use std::cmp::Ord;
 use extra::arc;
 use extra::priority_queue::PriorityQueue;
 use std::task;
-use extra::sync;
 
 static PORT:    int = 4414;
-static IPV4_LOOPBACK: IpAddr = Ipv4Addr(0,0,0,0);
+static IPV4_LOOPBACK: IpAddr = Ipv4Addr(127,0,0,1);
 static visitor_count: uint = 0u;
 
 static LEVEL1: u64 = 1024000;//1MB

@@ -29,6 +29,7 @@ static PORT:    int = 4414;
 static IPV4_LOOPBACK: IpAddr = Ipv4Addr(127,0,0,1);
 static visitor_count: uint = 0u;
 
+//TODO: A fixed scale is not good for general cases.
 static LEVEL1: u64 = 1024000;//1MB
 static LEVEL2: u64 = 15360000;//15MB
 static LEVEL3: u64 = 25600000;//25MB
@@ -77,6 +78,8 @@ impl Scheduler {
             }
             None => "0".to_owned()
         };
+        
+        // Wahoo-First scheduling
         if !(ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.")
                                           || ip_s.starts_with("50.134.")) {
             priority += 5;
@@ -84,7 +87,6 @@ impl Scheduler {
         sm.priority = priority;
         self.push(sm);
     }
-
 }
 
 fn main() {
@@ -97,7 +99,8 @@ fn main() {
     let (port, chan) = stream();
     let chan = SharedChan::new(chan);
     
-    // take file requests from queue, and send a response.
+    // dequeue file requests, and send responses.
+    // SRPT
     // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
         // simple caching for large file.
@@ -199,8 +202,7 @@ fn main() {
                 }
                 else {
                     // may do scheduling here
-                    //println!("get file request: {:?}", file_path);
-                    // add file requests into queue.
+                    // enqueue new request.
                     let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone()};
                     let (sm_port, sm_chan) = std::comm::stream();
                     sm_chan.send(msg);
@@ -213,7 +215,6 @@ fn main() {
                     child_chan.send(""); //notify the new request in queue.
                 }
             }
-            //println!("connection terminates")
         }
     }
 }

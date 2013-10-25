@@ -29,12 +29,6 @@ static PORT:    int = 4414;
 static IPV4_LOOPBACK: IpAddr = Ipv4Addr(127,0,0,1);
 static visitor_count: uint = 0u;
 
-//TODO: A fixed scale is not good for general cases.
-static LEVEL1: u64 = 1024000;//1MB
-static LEVEL2: u64 = 15360000;//15MB
-static LEVEL3: u64 = 25600000;//25MB
-static LEVEL4: u64 = 56320000;//55MB
-
 struct sched_msg {
     priority: uint,
     stream: Option<std::rt::io::net::tcp::TcpStream>,
@@ -63,11 +57,9 @@ impl Scheduler {
             }
             None => 0
         };
-        let mut priority = if file_size < LEVEL1 { 10 } 
-                           else if file_size < LEVEL2 { 20 }
-                           else if file_size < LEVEL3 { 30 }
-                           else if file_size < LEVEL4 { 40 }
-                           else { 50 };
+        
+        // A file with size smaller than 40 KByte can be responsed quickly 
+        let mut priority = file_size as uint / 20480;
 
         let ip_s = match sm.stream {
             Some(ref mut stream) => {
@@ -80,11 +72,12 @@ impl Scheduler {
         };
         
         // Wahoo-First scheduling
-        if !(ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.")
+        if (ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.")
                                           || ip_s.starts_with("50.134.")) {
-            priority += 5;
+            priority = (priority as f32 * 0.6) as uint;
         }
         sm.priority = priority;
+        println(fmt!("size: %u, priority: %u", file_size as uint, priority as uint));
         self.push(sm);
     }
 }
@@ -113,32 +106,6 @@ fn main() {
         
         // response the request
         // multiple tasks may help to utilize the network bandwidth.
-        do spawn {
-            loop {
-                let mut sm: sched_msg = sm_port.recv();
-                
-                if (sm.file_path == cached_file_path) {
-                    println(fmt!("begin serving cached file [%?]", sm.file_path));
-                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    sm.stream.write(cached_file_data);
-                    println("finish serving");
-                } else {
-                    println(fmt!("begin serving file [%?]", sm.file_path));
-                    let mut buf = [0, .. 40960];
-                    let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
-                    
-                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    while (!file_reader.eof()) {
-                        match file_reader.read(buf) {
-                            Some(len) => {sm.stream.write(buf.slice(0, len));}
-                            None => {}
-                        }
-                    }
-                    println("finish serving");
-                }
-            }
-        }
-        
         loop {
             port.recv(); // wait for requests
             // pop request from queue
@@ -148,8 +115,39 @@ fn main() {
                     Some(sm) => {sm_chan.send(sm);}
                 }
             }
-
+            let mut sm: sched_msg = sm_port.recv();
+            
+            if (sm.file_path == cached_file_path) {
+                println(fmt!("begin serving cached file [%?]", sm.file_path));
+                sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                sm.stream.write(cached_file_data);
+                println("finish serving");
+            } else {
+                println(fmt!("begin serving file [%?]", sm.file_path));
+                let mut buf = [0, .. 409600];
+                let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                
+                sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                while (!file_reader.eof()) {
+                    match file_reader.read(buf) {
+                        Some(len) => {sm.stream.write(buf.slice(0, len));}
+                        None => {}
+                    }
+                }
+                println("finish serving");
+            }
         }
+        /*
+        loop {
+            port.recv(); // wait for requests
+            // pop request from queue
+            do do_sched.write |sched| {
+                match sched.maybe_pop() {
+                    None => { // do nothing  }
+                    Some(sm) => {sm_chan.send(sm);}
+                }
+            }
+        }*/
     }
     
     let socket = net::tcp::TcpListener::bind(SocketAddr {ip: IPV4_LOOPBACK, port: PORT as u16});

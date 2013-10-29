@@ -18,7 +18,7 @@ use std::rt::io::*;
 use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
 use std::io::println;
 use std::cell::Cell;
-use std::{os, str, io};
+use std::{os, str};
 use std::comm::*;
 use std::cmp::Ord;
 use extra::arc;
@@ -28,6 +28,10 @@ use std::task;
 static PORT:    int = 4414;
 static IPV4_LOOPBACK: IpAddr = Ipv4Addr(127,0,0,1);
 static visitor_count: uint = 0u;
+// The number of concurrent response tasks.
+static CONCURRENT_RESPONSES: int = 5;
+// The file buffer size.
+static RESPONSE_BUFFER_SIZE: int = 409600;
 
 struct sched_msg {
     priority: uint,
@@ -91,63 +95,45 @@ fn main() {
     
     let (port, chan) = stream();
     let chan = SharedChan::new(chan);
+    let port = SharedPort::new(port);
     
     // dequeue file requests, and send responses.
     // SRPT
     // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
     do task::spawn_sched(task::SingleThreaded) {
-        // simple caching for large file.
-        // TODO: smart caching on requested files.
-        let cached_file_path = ~os::getcwd().push("zhtta");
-        let cached_file_data = io::read_whole_file(cached_file_path).unwrap();
-        
-        let (sm_port, sm_chan) = stream();
-        
-        
-        // response the request
-        // multiple tasks may help to utilize the network bandwidth.
-        loop {
-            port.recv(); // wait for requests
-            // pop request from queue
-            do do_sched.write |sched| {
-                match sched.maybe_pop() {
-                    None => { /* do nothing */ }
-                    Some(sm) => {sm_chan.send(sm);}
-                }
-            }
-            let mut sm: sched_msg = sm_port.recv();
+        // spawn CONCURRENT_TASKS tasks to do the response concurrently
+        for _ in range(0, CONCURRENT_RESPONSES) {
+            let child_port = port.clone();
+            let do_sched = do_sched.clone();
             
-            if (sm.file_path == cached_file_path) {
-                println(fmt!("begin serving cached file [%?]", sm.file_path));
-                sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                sm.stream.write(cached_file_data);
-                println("finish serving");
-            } else {
-                println(fmt!("begin serving file [%?]", sm.file_path));
-                let mut buf = [0, .. 409600];
-                let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+            do spawn {
+                let (sm_port, sm_chan) = stream();
                 
-                sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                while (!file_reader.eof()) {
-                    match file_reader.read(buf) {
-                        Some(len) => {sm.stream.write(buf.slice(0, len));}
-                        None => {}
+                loop {
+                    child_port.recv(); // wait for new request
+                    do do_sched.write |sched| {
+                        match sched.maybe_pop() {
+                            None => { /* do nothing */ }
+                            Some(msg) => {sm_chan.send(msg);}
+                        }
                     }
+                
+                    let mut sm: sched_msg = sm_port.recv(); // get new request
+                    println(fmt!("begin serving file [%?]", sm.file_path));
+                    let mut buf = [0, .. RESPONSE_BUFFER_SIZE];
+                    let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                    
+                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                    while (!file_reader.eof()) {
+                        match file_reader.read(buf) {
+                            Some(len) => {sm.stream.write(buf.slice(0, len));}
+                            None => {}
+                        }
+                    }
+                    println("finish serving");
                 }
-                println("finish serving");
             }
         }
-        /*
-        loop {
-            port.recv(); // wait for requests
-            // pop request from queue
-            do do_sched.write |sched| {
-                match sched.maybe_pop() {
-                    None => { // do nothing  }
-                    Some(sm) => {sm_chan.send(sm);}
-                }
-            }
-        }*/
     }
     
     let socket = net::tcp::TcpListener::bind(SocketAddr {ip: IPV4_LOOPBACK, port: PORT as u16});
@@ -177,11 +163,9 @@ fn main() {
             let req_group : ~[&str]= request_str.splitn_iter(' ', 3).collect();
             if req_group.len() > 2 {
                 let path = req_group[1];
-                //println!("Request for path: \n{}", path);
                 
                 let file_path = ~os::getcwd().push(path.replace("/../", ""));
                 if !os::path_exists(file_path) || os::path_is_dir(file_path) {
-                    //println!("Request received:\n{}", request_str);
                     do inc_v_count.read |&v_count| {
                         let response: ~str = fmt!(
                             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
@@ -208,7 +192,7 @@ fn main() {
                     do child_add_sched.write |sched| {
                         let msg = sm_port.recv();
                         sched.add_sched_msg(msg);
-                        println("add to queue");
+                        println("new request added to queue");
                     }
                     child_chan.send(""); //notify the new request in queue.
                 }

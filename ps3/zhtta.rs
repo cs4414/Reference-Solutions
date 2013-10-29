@@ -52,13 +52,9 @@ impl Scheduler {
     }
 
     fn add_sched_msg(&mut self, mut sm: sched_msg) {
-        let file_size = match file::open(sm.file_path, Open, Read) {
-            Some(filestream) => {
-                let mut fs = filestream;
-                fs.seek(0, SeekEnd);
-                fs.tell()
-            }
-            None => 0
+        let file_size = match std::rt::io::file::stat(sm.file_path) {
+                            Some(s) => s.size as uint,
+                            None() => 0,
         };
         
         // A file with size smaller than 40 KByte can be responsed quickly 

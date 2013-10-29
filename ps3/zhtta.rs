@@ -15,7 +15,7 @@
 extern mod extra;
 
 use std::rt::io::*;
-use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
+use std::rt::io::net::ip::{SocketAddr};
 use std::io::println;
 use std::cell::Cell;
 use std::{os, str};
@@ -25,7 +25,7 @@ use extra::arc;
 use extra::priority_queue::PriorityQueue;
 
 static PORT:    int = 4414;
-static IPV4_LOOPBACK: IpAddr = Ipv4Addr(127,0,0,1);
+static IP: &'static str = "127.0.0.1";
 static visitor_count: uint = 0u;
 // The number of concurrent response tasks.
 static CONCURRENT_RESPONSES: int = 5;
@@ -131,9 +131,14 @@ fn main() {
         }
     }
     
-    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: IPV4_LOOPBACK, port: PORT as u16});
+    let ip = match FromStr::from_str(IP) { Some(ip) => ip, 
+                                           None => { println(fmt!("Error: Invalid IP address <%s>", IP));
+                                                     return;},
+                                         };
     
-    println!("Listening on tcp port {} ...", PORT);
+    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: ip, port: PORT as u16});
+    
+    println(fmt!("Listening on %s:%d ...", IP, PORT));
     let mut acceptor = socket.listen().unwrap();
     
     for stream in acceptor.incoming() {

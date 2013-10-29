@@ -23,7 +23,6 @@ use std::comm::*;
 use std::cmp::Ord;
 use extra::arc;
 use extra::priority_queue::PriorityQueue;
-use std::task;
 
 static PORT:    int = 4414;
 static IPV4_LOOPBACK: IpAddr = Ipv4Addr(127,0,0,1);
@@ -31,7 +30,7 @@ static visitor_count: uint = 0u;
 // The number of concurrent response tasks.
 static CONCURRENT_RESPONSES: int = 5;
 // The file buffer size.
-static RESPONSE_BUFFER_SIZE: int = 409600;
+static RESPONSE_BUFFER_SIZE: int = 102400;
 
 struct sched_msg {
     priority: uint,
@@ -76,12 +75,12 @@ impl Scheduler {
         };
         
         // Wahoo-First scheduling
-        if (ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.")
-                                          || ip_s.starts_with("50.134.")) {
+        if (ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.") || ip_s.starts_with("172.26.") 
+                                         || ip_s.starts_with("50.134.")) {
             priority = (priority as f32 * 0.6) as uint;
         }
         sm.priority = priority;
-        println(fmt!("size: %u, priority: %u", file_size as uint, priority as uint));
+        //println(fmt!("size: %u, priority: %u", file_size as uint, priority as uint));
         self.push(sm);
     }
 }
@@ -96,42 +95,38 @@ fn main() {
     let (port, chan) = stream();
     let chan = SharedChan::new(chan);
     let port = SharedPort::new(port);
-    
-    // dequeue file requests, and send responses.
-    // SRPT
-    // unknown function in the scope will block the whole thread, so I use a new scheduler to create this task.
-    do task::spawn_sched(task::SingleThreaded) {
-        // spawn CONCURRENT_TASKS tasks to do the response concurrently
-        for _ in range(0, CONCURRENT_RESPONSES) {
-            let child_port = port.clone();
-            let do_sched = do_sched.clone();
+
+    // Spawn multiple tasks to response the requests concurrently
+    for _ in range(0, CONCURRENT_RESPONSES) {
+        let child_port = port.clone();
+        let do_sched = do_sched.clone();
+        
+        do spawn {
+            let (sm_port, sm_chan) = stream();
+            let mut buf = [0, .. RESPONSE_BUFFER_SIZE];
             
-            do spawn {
-                let (sm_port, sm_chan) = stream();
-                
-                loop {
-                    child_port.recv(); // wait for new request
-                    do do_sched.write |sched| {
-                        match sched.maybe_pop() {
-                            None => { /* do nothing */ }
-                            Some(msg) => {sm_chan.send(msg);}
-                        }
+            loop {
+                child_port.recv(); // wait for new request
+                do do_sched.write |sched| {
+                    match sched.maybe_pop() {
+                        None => { /* do nothing */ }
+                        Some(msg) => {sm_chan.send(msg);}
                     }
-                
-                    let mut sm: sched_msg = sm_port.recv(); // get new request
-                    println(fmt!("begin serving file [%?]", sm.file_path));
-                    let mut buf = [0, .. RESPONSE_BUFFER_SIZE];
-                    let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
-                    
-                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    while (!file_reader.eof()) {
-                        match file_reader.read(buf) {
-                            Some(len) => {sm.stream.write(buf.slice(0, len));}
-                            None => {}
-                        }
-                    }
-                    println("finish serving");
                 }
+            
+                let mut sm: sched_msg = sm_port.recv(); // get new request
+                println(fmt!("begin serving file [%?]", sm.file_path));
+                
+                let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                
+                sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                while (!file_reader.eof()) {
+                    match file_reader.read(buf) {
+                        Some(len) => {sm.stream.write(buf.slice(0, len));}
+                        None => {}
+                    }
+                }
+                println("finish serving");
             }
         }
     }
@@ -141,8 +136,6 @@ fn main() {
     println!("Listening on tcp port {} ...", PORT);
     let mut acceptor = socket.listen().unwrap();
     
-    // we can limit the incoming connection count.
-    //for stream in acceptor.incoming().take(10 as uint) {
     for stream in acceptor.incoming() {
         let stream = Cell::new(stream);
         
@@ -153,7 +146,7 @@ fn main() {
         do spawn {
             do inc_v_count.write |v_count| {
                 *v_count += 1;
-            }  
+            }
             
             let mut stream = stream.take();
             let mut buf = [0, ..500];
@@ -192,7 +185,7 @@ fn main() {
                     do child_add_sched.write |sched| {
                         let msg = sm_port.recv();
                         sched.add_sched_msg(msg);
-                        println("new request added to queue");
+                        //println("new request added to queue");
                     }
                     child_chan.send(""); //notify the new request in queue.
                 }

@@ -45,15 +45,21 @@ def csv_parse(csv_path, tarball_dir):
                 print "URL error: %s\n" % tag_url
 
 def generate_test_files():
-    os.system("dd if=/dev/zero of=100M.bin bs=100M count=1")
-    os.system("dd if=/dev/zero of=50M.bin bs=50M count=1")
-    os.system("echo -e \"\index.html\n50M.bin\" > cs4414urls.txt")
-    os.system("tr \"\n\" \"\0\" < cs4414urls.txt > cs4414urls.httperf")
+    os.system("dd if=/dev/urandom of=5K.bin bs=5K count=1")
+    os.system("dd if=/dev/urandom of=5M.bin bs=5M count=1")
+    os.system("dd if=/dev/urandom of=10M.bin bs=10M count=1")
+    os.system("dd if=/dev/urandom of=20M.bin bs=20M count=1")
+    os.system("dd if=/dev/urandom of=40M.bin bs=40M count=1")
+    os.system("dd if=/dev/urandom of=80M.bin bs=80M count=1")
+    os.system("dd if=/dev/urandom of=512M.bin bs=512M count=1")
+    os.system("wget http://www.cs.virginia.edu/~wx4ed/cs4414/ps3/zhtta-test-urls.txt")
+    os.system("tr \"\n\" \"\0\" < zhtta-test-urls.txt > zhtta-test-urls.httperf")
+#    more small files of different names & sizes - name of file does not imply size
+    # For localhost - request a greater number of files
+    
 
 def delete_test_files():
-    os.remove("100M.bin")
-    os.remove("50M.bin")
-    os.remove("cs4414urls.txt")
+    os.remove("./*.bin")
     os.remove("cs4414urls.httperf")
 
 def main():
@@ -70,7 +76,9 @@ def main():
         
 #    csv_parse(csv_path, tarball_dir)
     os.chdir(tarball_dir)
-
+    
+    generate_test_files()
+    
     for files in os.listdir("."):
         if files.endswith(".zip"):
             folder = os.path.splitext(files)[0]
@@ -82,11 +90,17 @@ def main():
 
             if os.path.isfile("./zhtta.rs"):
                 print "%s:\n" % os.getcwd()
+                
                 sys.stdout.flush()
                 os.system("../../../cloc.pl --quiet zhtta.rs")
-                generate_test_files()
-                os.system("rust run zhtta.rs &");
-                os.system("./httperf --server localhost --port 4414 --rate 800 --num-conns 8000 --wlog=y,../cs4414urls.httperf")
+                
+                os.system("cp " + tarball_dir + "/*.bin ./")
+                os.system("cp " + tarball_dir + "zhtta-test-urls.httperf ./")
+                
+                os.system("make");
+                os.system("./zhtta &");
+                
+                os.system("httperf --server localhost --port 4414 --rate 60 --num-conns 60 --wlog=y,./zhtta-test-urls.httperf")
                 delete_test_files()
             else:
                 print "no zhtta.rs: %s\n" % os.getcwd()

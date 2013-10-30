@@ -28,20 +28,20 @@ def csv_parse(csv_path, tarball_dir):
     with open(csv_path, 'rb') as csvfile:
         spamreader = csv.reader(csvfile)
         for row in spamreader:
-            ts, stu_name, computing_id, tag_url, q1, q2= row[0], row[1], row[2], row[3], row[6], row[7]
+            ts, partner1_name, partner1_email, partner2_name, partner2_email, partner3_name, partner3_email, safe_counter_success, wahoofirst_success, sptf_success, gash_success, benchmarking_comments, memcache_success, demo_time, extra_extension, tag_url = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13], row[14], row[15]
             tag_match = url_pattern.match(tag_url)
             if tag_match:
                 github_username, repo_name, submit_version = tag_match.group(1, 2, 4)
                 zip_src_tarball_url = "https://github.com/%s/%s/archive/%s.zip" % (github_username, repo_name, submit_version)
                 
-                tarball_name = "%s - ps1 - %s.zip" % (computing_id, submit_version)
+                tarball_name = "%s - ps3 - %s.zip" % (partner1_email, submit_version)
                 download_with_auth(zip_src_tarball_url, os.path.join(tarball_dir, tarball_name))
                 
                 if repo_name != REPO_NAME:
-                    print "Student name: %s (%s)" % (stu_name, computing_id)
-                    print "[ignore] Repo name error: %s\n" % repo_name
+                    print "Student name: %s (%s)" % (partner1_name, partner1_email)
+                    print "[ignore] Repo name error: %s\n" % repo_namenn
             else:
-                print "Student name: %s (%s)" % (stu_name, computing_id)
+                print "Student name: %s (%s)" % (partner1_name, partner1_email)
                 print "URL error: %s\n" % tag_url
 
 def generate_test_files():
@@ -63,8 +63,9 @@ def delete_test_files():
     os.remove("cs4414urls.httperf")
 
 def main():
-    repo_name = 'cs4414-ps1'
-    csv_path = './cs4414- PS1 Submission (Responses) - Form Responses.csv'
+    repo_name = 'cs4414-ps3'
+
+    csv_path = 'ps3-responses.csv'
     tarball_dir = "code-submission"
 
 
@@ -74,7 +75,7 @@ def main():
     if not os.path.isdir(tarball_dir):
         os.makedirs(tarball_dir)
         
-#    csv_parse(csv_path, tarball_dir)
+    csv_parse(csv_path, tarball_dir)
     os.chdir(tarball_dir)
     
     generate_test_files()

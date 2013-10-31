@@ -1,0 +1,422 @@
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/jpl4ke - ps3 - v1.99/cs4414-ps3-1.99:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 58 test-duration 0.985 s
+
+Connection rate: 60.9 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.2 avg 2.0 max 6.0 median 1.5 stddev 1.1
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.9 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 1.7 transfer 0.3
+Reply size [B]: header 59.0 content 641.0 footer 0.0 (total 700.0)
+Reply status: 1xx=0 2xx=58 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.04 system 0.94 (user 4.1% system 95.4% total 99.5%)
+Net I/O: 44.3 KB/s (0.4*10^6 bps)
+
+Errors: total 2 client-timo 0 socket-timo 0 connrefused 1 connreset 1
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/cta5bb - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.988 s
+
+Connection rate: 60.7 conn/s (16.5 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.5 avg 4.5 max 14.7 median 3.5 stddev 2.5
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.7 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 3.4 transfer 1.1
+Reply size [B]: header 59.0 content 689.0 footer 0.0 (total 748.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.03 system 0.94 (user 3.2% system 95.1% total 98.4%)
+Net I/O: 47.7 KB/s (0.4*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/ns4av - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 1.067 s
+
+Connection rate: 56.2 conn/s (17.8 ms/conn, <=40 concurrent connections)
+Connection time [ms]: min 79.6 avg 394.7 max 673.1 median 408.5 stddev 190.4
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 55.3 req/s (18.1 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 382.7 transfer 11.9
+Reply size [B]: header 59.0 content 75.0 footer 0.0 (total 134.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.01 system 0.84 (user 1.1% system 79.1% total 80.2%)
+Net I/O: 10.9 KB/s (0.1*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/zab7ge - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.986 s
+
+Connection rate: 60.8 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.4 avg 2.6 max 10.4 median 2.5 stddev 1.4
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.8 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 2.2 transfer 0.4
+Reply size [B]: header 59.0 content 492.0 footer 0.0 (total 551.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.01 system 0.95 (user 0.8% system 96.5% total 97.3%)
+Net I/O: 36.2 KB/s (0.3*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/js2wt - ps3 - v1/cs4414-ps3-1:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.986 s
+
+Connection rate: 60.8 conn/s (16.4 ms/conn, <=2 concurrent connections)
+Connection time [ms]: min 1.8 avg 3.7 max 22.5 median 2.5 stddev 3.1
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.8 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 3.0 transfer 0.7
+Reply size [B]: header 59.0 content 650.0 footer 0.0 (total 709.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.06 system 0.91 (user 5.7% system 92.1% total 97.7%)
+Net I/O: 45.5 KB/s (0.4*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+no zhtta.rs: /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/cpn2pf - ps3 - 1.0/cs4414-ps3-1.0
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/dsn5ft - ps3 - v0.4/cs4414-ps3-0.4:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.987 s
+
+Connection rate: 60.8 conn/s (16.5 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.4 avg 3.6 max 10.6 median 3.5 stddev 1.6
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.7 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 2.7 transfer 0.9
+Reply size [B]: header 59.0 content 641.0 footer 0.0 (total 700.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.04 system 0.92 (user 3.6% system 93.6% total 97.2%)
+Net I/O: 44.9 KB/s (0.4*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/xl4ry - ps3 - v1.5/cs4414-ps3-1.5:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.987 s
+
+Connection rate: 60.8 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.5 avg 2.7 max 11.2 median 2.5 stddev 1.6
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.8 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 2.4 transfer 0.3
+Reply size [B]: header 59.0 content 402.0 footer 0.0 (total 461.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.04 system 0.92 (user 4.1% system 93.6% total 97.7%)
+Net I/O: 31.0 KB/s (0.3*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/jg9af - ps3 - v20/cs4414-ps3-20:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.985 s
+
+Connection rate: 60.9 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.4 avg 2.2 max 9.8 median 1.5 stddev 1.2
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.9 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 1.8 transfer 0.4
+Reply size [B]: header 59.0 content 605.0 footer 0.0 (total 664.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.02 system 0.95 (user 2.4% system 96.2% total 98.7%)
+Net I/O: 42.9 KB/s (0.4*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/hsm5xw - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.987 s
+
+Connection rate: 60.8 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.6 avg 2.8 max 15.1 median 2.5 stddev 1.8
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.8 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 2.4 transfer 0.4
+Reply size [B]: header 59.0 content 513.0 footer 0.0 (total 572.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.02 system 0.95 (user 2.0% system 96.1% total 98.1%)
+Net I/O: 37.5 KB/s (0.3*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/njs5jb - ps3 - v1.1/cs4414-ps3-1.1:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 53 replies 53 test-duration 0.987 s
+
+Connection rate: 60.8 conn/s (16.5 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.2 avg 3.9 max 10.9 median 3.5 stddev 2.0
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 53.7 req/s (18.6 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 3.1 transfer 0.8
+Reply size [B]: header 59.0 content 605.0 footer 0.0 (total 664.0)
+Reply status: 1xx=0 2xx=53 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.03 system 0.92 (user 2.8% system 93.2% total 96.0%)
+Net I/O: 38.4 KB/s (0.3*10^6 bps)
+
+Errors: total 7 client-timo 0 socket-timo 0 connrefused 7 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/ktt3ja - ps3 - v0.1/cs4414-ps3-0.1:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 60 replies 60 test-duration 0.986 s
+
+Connection rate: 60.9 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.3 avg 2.2 max 12.5 median 1.5 stddev 1.5
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 60.9 req/s (16.4 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 1.9 transfer 0.3
+Reply size [B]: header 59.0 content 641.0 footer 0.0 (total 700.0)
+Reply status: 1xx=0 2xx=60 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.02 system 0.96 (user 1.6% system 97.0% total 98.6%)
+Net I/O: 45.7 KB/s (0.4*10^6 bps)
+
+Errors: total 0 client-timo 0 socket-timo 0 connrefused 0 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/cem8u - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 59 replies 59 test-duration 0.987 s
+
+Connection rate: 60.8 conn/s (16.5 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.4 avg 4.1 max 12.9 median 3.5 stddev 1.8
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 59.8 req/s (16.7 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 3.5 transfer 0.6
+Reply size [B]: header 59.0 content 677.0 footer 0.0 (total 736.0)
+Reply status: 1xx=0 2xx=59 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.03 system 0.94 (user 2.8% system 94.8% total 97.7%)
+Net I/O: 47.0 KB/s (0.4*10^6 bps)
+
+Errors: total 1 client-timo 0 socket-timo 0 connrefused 1 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/ekt7be - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 58 replies 58 test-duration 0.986 s
+
+Connection rate: 60.8 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.4 avg 2.5 max 6.0 median 2.5 stddev 0.9
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 58.8 req/s (17.0 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 2.1 transfer 0.4
+Reply size [B]: header 59.0 content 641.0 footer 0.0 (total 700.0)
+Reply status: 1xx=0 2xx=58 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.01 system 0.94 (user 1.2% system 95.7% total 96.9%)
+Net I/O: 44.2 KB/s (0.4*10^6 bps)
+
+Errors: total 2 client-timo 0 socket-timo 0 connrefused 2 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+
+
+BENCHMARKING SUBMISSION IN /home/purnam/bin/cs4414/Reference-Solutions/utils/code-submission/jy4ny - ps3 - v1.0/cs4414-ps3-1.0:
+
+BEGINNING HTTPERF
+
+httperf --client=0/1 --server=localhost --port=4414 --uri=/ --rate=60 --send-buffer=4096 --recv-buffer=16384 --num-conns=60 --num-calls=1
+Maximum connect burst length: 1
+
+Total: connections 60 requests 57 replies 57 test-duration 0.987 s
+
+Connection rate: 60.8 conn/s (16.4 ms/conn, <=1 concurrent connections)
+Connection time [ms]: min 1.7 avg 3.4 max 11.1 median 2.5 stddev 2.1
+Connection time [ms]: connect 0.0
+Connection length [replies/conn]: 1.000
+
+Request rate: 57.8 req/s (17.3 ms/req)
+Request size [B]: 68.0
+
+Reply rate [replies/s]: min 0.0 avg 0.0 max 0.0 stddev 0.0 (0 samples)
+Reply time [ms]: response 2.9 transfer 0.5
+Reply size [B]: header 59.0 content 623.0 footer 0.0 (total 682.0)
+Reply status: 1xx=0 2xx=57 3xx=0 4xx=0 5xx=0
+
+CPU time [s]: user 0.04 system 0.94 (user 3.6% system 95.3% total 98.9%)
+Net I/O: 42.4 KB/s (0.3*10^6 bps)
+
+Errors: total 3 client-timo 0 socket-timo 0 connrefused 3 connreset 0
+Errors: fd-unavail 0 addrunavail 0 ftab-full 0 other 0
+END HTTPERF
+

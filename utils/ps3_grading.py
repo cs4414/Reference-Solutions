@@ -82,7 +82,7 @@ def main():
     csv_path = 'ps3-responses.csv'
     tarball_dir = "code-submission"
 
-
+''' Already downloaded submissions into Dropbox/ps3/code-submission/
     if not os.path.isfile(csv_path):
         print "No .csv file"
         return
@@ -90,10 +90,11 @@ def main():
         os.makedirs(tarball_dir)
         
     csv_parse(csv_path, tarball_dir)
+'''
     os.chdir(tarball_dir)
-    
+
     generate_test_files()
-    
+
     for files in os.listdir("."):
         if files.endswith(".zip"):
             folder = os.path.splitext(files)[0]
@@ -109,13 +110,13 @@ def main():
                 sys.stdout.flush()
                 os.system("../../../cloc.pl --quiet zhtta.rs")
                 
-                os.system("cp " + tarball_dir + "/5K.bin ./")
-                os.system("cp " + tarball_dir + "/5M.bin ./")
-                os.system("cp " + tarball_dir + "/10M.bin ./")
-                os.system("cp " + tarball_dir + "/20M.bin ./")
-                os.system("cp " + tarball_dir + "/40M.bin ./")
-                os.system("cp " + tarball_dir + "/80M.bin ./")
-                os.system("cp " + tarball_dir + "/512M.bin ./")
+                os.system("ln -s " + tarball_dir + "/5K.bin ./")
+                os.system("ln -s " + tarball_dir + "/5M.bin ./")
+                os.system("ln -s " + tarball_dir + "/10M.bin ./")
+                os.system("ln -s " + tarball_dir + "/20M.bin ./")
+                os.system("ln -s " + tarball_dir + "/40M.bin ./")
+                os.system("ln -s " + tarball_dir + "/80M.bin ./")
+                os.system("ln -s " + tarball_dir + "/512M.bin ./")
 
                 os.system("cp " + tarball_dir + "/zhtta-test-urls.httperf ./")
                 
@@ -127,6 +128,7 @@ def main():
             else:
                 print "no zhtta.rs: %s\n" % os.getcwd()
             os.chdir("../..")
+
 
 if  __name__ =='__main__':main()
 

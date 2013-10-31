@@ -68,13 +68,18 @@ def generate_test_files():
     if not os.path.isfile("zhtta-test-urls.txt"):
         os.system("wget http://www.cs.virginia.edu/~wx4ed/cs4414/ps3/zhtta-test-urls.txt")
         os.system("tr \"\\n\" \"\\0\" < zhtta-test-urls.txt > zhtta-test-urls.httperf")
-#    more small files of different names & sizes - name of file does not imply size
-    # For localhost - request a greater number of files
     
 
 def delete_test_files():
-    os.remove("./*.bin")
-    os.remove("cs4414urls.httperf")
+    os.remove("./5K.bin")
+    os.remove("./5M.bin")
+    os.remove("./10M.bin")
+    os.remove("./20M.bin")
+    os.remove("./40M.bin")
+    os.remove("./80M.bin")
+    os.remove("./512M.bin")
+
+    os.remove("./zhtta-test-urls.httperf")
 
 def main():
     repo_name = 'cs4414-ps3'
@@ -82,7 +87,7 @@ def main():
     csv_path = 'ps3-responses.csv'
     tarball_dir = "code-submission"
 
-
+    ''' Already downloaded submissions into Dropbox/ps3/code-submission/
     if not os.path.isfile(csv_path):
         print "No .csv file"
         return
@@ -90,10 +95,11 @@ def main():
         os.makedirs(tarball_dir)
         
     csv_parse(csv_path, tarball_dir)
+    '''
     os.chdir(tarball_dir)
-    
+
     generate_test_files()
-    
+
     for files in os.listdir("."):
         if files.endswith(".zip"):
             folder = os.path.splitext(files)[0]
@@ -104,29 +110,44 @@ def main():
             os.chdir(os.listdir(".")[0])
 
             if os.path.isfile("./zhtta.rs"):
-                print "%s:\n" % os.getcwd()
+                print "\nBENCHMARKING SUBMISSION IN %s:\n" % os.getcwd()
                 
                 sys.stdout.flush()
-                os.system("../../../cloc.pl --quiet zhtta.rs")
                 
-                os.system("cp " + tarball_dir + "/5K.bin ./")
-                os.system("cp " + tarball_dir + "/5M.bin ./")
-                os.system("cp " + tarball_dir + "/10M.bin ./")
-                os.system("cp " + tarball_dir + "/20M.bin ./")
-                os.system("cp " + tarball_dir + "/40M.bin ./")
-                os.system("cp " + tarball_dir + "/80M.bin ./")
-                os.system("cp " + tarball_dir + "/512M.bin ./")
+                # run Count Lines Of Code
+                # os.system("../../../cloc.pl --quiet zhtta.rs")
+                if not os.path.isfile("./512M.bin"):
+                    os.system("ln -s " + tarball_dir + "/5K.bin ./")
+                    os.system("ln -s " + tarball_dir + "/5M.bin ./")
+                    os.system("ln -s " + tarball_dir + "/10M.bin ./")
+                    os.system("ln -s " + tarball_dir + "/20M.bin ./")
+                    os.system("ln -s " + tarball_dir + "/40M.bin ./")
+                    os.system("ln -s " + tarball_dir + "/80M.bin ./")
+                    os.system("ln -s " + tarball_dir + "/512M.bin ./")
 
-                os.system("cp " + tarball_dir + "/zhtta-test-urls.httperf ./")
+                os.system("cp ../../../" + tarball_dir + "/zhtta-test-urls.httperf ./")
                 
-                os.system("make");
-                os.system("./zhtta &");
-                
+                os.system("make > /dev/null 2>&1");
+                if not os.path.isfile("./zhtta"):
+                    os.system("rustc ./zhtta.rs > /dev/null 2>&1")
+                if not os.path.isfile("./zhtta"):
+                    print "Could not build zhtta"
+                    continue
+                else:
+                    os.system("./zhtta > /dev/null 2>&1 &")
+
+                print "BEGINNING HTTPERF\n"
+                sys.stdout.flush()
                 os.system("httperf --server localhost --port 4414 --rate 60 --num-conns 60 --wlog=y,./zhtta-test-urls.httperf")
+                sys.stdout.flush()
+                print "END HTTPERF\n"
+                sys.stdout.flush()
+                os.system("killall zhtta")
                 delete_test_files()
             else:
                 print "no zhtta.rs: %s\n" % os.getcwd()
             os.chdir("../..")
+
 
 if  __name__ =='__main__':main()
 

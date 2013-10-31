@@ -14,15 +14,18 @@
 
 extern mod extra;
 
+
 use std::rt::io::*;
 use std::rt::io::net::ip::{SocketAddr};
 use std::io::println;
 use std::cell::Cell;
-use std::{os, str};
+use std::{os, str, io};
+use std::io::ReaderUtil;
 use std::comm::*;
 use std::cmp::Ord;
 use extra::arc;
 use extra::priority_queue::PriorityQueue;
+mod gash;
 
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
@@ -57,7 +60,7 @@ impl Scheduler {
                             None() => 0,
         };
         
-        // A file with size smaller than 40 KByte can be responsed quickly 
+        // A file with size smaller than 40 KByte should be responsed quickly 
         let mut priority = file_size as uint / 20480;
 
         let ip_s = match sm.stream {
@@ -71,13 +74,22 @@ impl Scheduler {
         };
         
         // Wahoo-First scheduling
-        if (ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.") || ip_s.starts_with("172.26.") 
-                                         || ip_s.starts_with("50.134.")) {
+        if (is_wahoo(ip_s)) {
             priority = (priority as f32 * 0.6) as uint;
+            sm.priority = priority;
         }
-        sm.priority = priority;
+        
         //println(fmt!("size: %u, priority: %u", file_size as uint, priority as uint));
         self.push(sm);
+    }
+}
+
+fn is_wahoo(ip_s: &str) -> bool {
+    if (ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.") || ip_s.starts_with("172.26.") 
+                                     || ip_s.starts_with("50.134.")) {
+        return true;
+    } else {
+        return false;
     }
 }
 
@@ -112,16 +124,65 @@ fn main() {
             
                 let mut sm: sched_msg = sm_port.recv(); // get new request
                 println(fmt!("begin serving file [%?]", sm.file_path));
-                
-                let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
-                
-                sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                while (!file_reader.eof()) {
-                    match file_reader.read(buf) {
-                        Some(len) => {sm.stream.write(buf.slice(0, len));}
-                        None => {}
+                                
+                if sm.file_path.to_str().ends_with(".shtml") {
+                    match io::file_reader(sm.file_path) {
+                        Err(err) => { println(err); },
+                        Ok(reader) => {
+                            do reader.each_line() |line| {
+                                if line.contains("<!--#exec cmd=\"") {
+                                    let start = line.find_str("<!--#exec cmd=\"").unwrap();
+                                    let start_cmd = start + 15;
+                                    let mut end_cmd = -1;
+                                    let mut end = -1;
+                                    for i in range(start_cmd+1, line.len()) {
+                                        if line.char_at(i) == '"' {
+                                            end_cmd = i;
+                                        } else if line.char_at(i) == '>' {
+                                            end = i + 1;
+                                        }
+                                        if end_cmd != -1 && end != -1 {
+                                            break;
+                                        }
+                                    }
+                                    if end_cmd == -1 || end == -1 || end_cmd >= end {
+                                        sm.stream.write(line.as_bytes());
+                                    } else {
+                                        sm.stream.write(line.slice_to(start).as_bytes());
+                                        let cmd = line.slice(start_cmd, end_cmd);
+                                        match gash::handle_cmdline(cmd) {
+                                            Some(process_output) => {
+                                                // Assume we are running on POSIX compliant machine
+                                                if process_output.status == 0 {
+                                                    sm.stream.write(process_output.output);
+                                                } else {
+                                                    sm.stream.write(process_output.error);
+                                                }
+                                            }
+                                            None => ()
+                                        }
+                                        sm.stream.write(line.slice_from(end).as_bytes());
+                                    }
+                                } else {
+                                    sm.stream.write(line.as_bytes());
+                                }
+                                true
+                            };
+                        }
+                    }
+                    
+                } else {
+                    let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                    while (!file_reader.eof()) {
+                        match file_reader.read(buf) {
+                            Some(len) => {sm.stream.write(buf.slice(0, len));}
+                            None => {}
+                        }
                     }
                 }
+                
+                
                 println("finish serving");
             }
         }

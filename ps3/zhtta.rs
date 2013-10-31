@@ -26,14 +26,15 @@ use std::cmp::Ord;
 use extra::arc;
 use extra::priority_queue::PriorityQueue;
 mod gash;
+mod lru_cache;
 
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
 static visitor_count: uint = 0u;
 // The number of concurrent response tasks.
-static CONCURRENT_RESPONSES: int = 5;
-// The file buffer size.
-static RESPONSE_BUFFER_SIZE: int = 102400;
+static CONCURRENT_RESPONSESOR: int = 5;
+// The file chunk size for reading.
+static FILE_CHUNK_SIZE: int = 102400;
 
 struct sched_msg {
     priority: uint,
@@ -105,13 +106,13 @@ fn main() {
     let port = SharedPort::new(port);
 
     // Spawn multiple tasks to response the requests concurrently
-    for _ in range(0, CONCURRENT_RESPONSES) {
+    for _ in range(0, CONCURRENT_RESPONSESOR) {
         let child_port = port.clone();
         let do_sched = do_sched.clone();
         
         do spawn {
             let (sm_port, sm_chan) = stream();
-            let mut buf = [0, .. RESPONSE_BUFFER_SIZE];
+            let mut buf = [0, .. FILE_CHUNK_SIZE];
             
             loop {
                 child_port.recv(); // wait for new request

@@ -138,8 +138,24 @@ def main():
 
                 print "BEGINNING HTTPERF\n"
                 sys.stdout.flush()
-                os.system("httperf --server localhost --port 4414 --rate 60 --num-conns 60 --wlog=y,./zhtta-test-urls.httperf")
-                sys.stdout.flush()
+                proc = subprocess.Popen(["httperf","--server", "localhost", "--port", "4414", "--rate", "60", "--num-conns", "60", "--wlog=y,./zhtta-test-urls.httperf"], stdout=subprocess.PIPE)
+                for line in iter(proc.stdout.readline,''):
+                    # need test-duration(s), reply time(ms), Net I/O, errors
+                    output_line = line.rstrip()
+                    testduration = re.search(r'test-duration (\d+\.\d+) s', output_line)
+                    replytime = re.search(r'Reply time [ms]: response (\d+\.\d+)', output_line)
+                    netio = re.search(r'Net I/O: (\d+\.\d+) KB/s', output_line)
+                    errorcount = re.search(r'Errors: total (\d+)', output_line)
+                    if testduration:
+                        print "Test duration: %s s\n" % testduration.group(1)
+                    elif replytime:
+                        print "Reply time: %s ms\n" % replytime.group(1)
+                    elif netio:
+                        print "Net I/O: %s KB/s\n" % netio.group(1)
+                    elif errorcount:
+                        print "Error count: %s\n" % errorcount.group(1)    
+                    sys.stdout.flush()
+
                 print "END HTTPERF\n"
                 sys.stdout.flush()
                 os.system("killall zhtta")

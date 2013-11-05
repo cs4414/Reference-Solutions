@@ -14,7 +14,6 @@
 
 extern mod extra;
 
-
 use std::rt::io::*;
 use std::rt::io::net::ip::{SocketAddr};
 use std::io::println;
@@ -25,20 +24,28 @@ use std::comm::*;
 use std::cmp::Ord;
 use extra::arc;
 use extra::priority_queue::PriorityQueue;
+
+use lru_cache::LRUCache;
+use std::hashmap::HashMap;
+
 mod gash;
+mod lru_cache;
 
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
 static visitor_count: uint = 0u;
 // The number of concurrent response tasks.
-static CONCURRENT_RESPONSES: int = 5;
-// The file buffer size.
-static RESPONSE_BUFFER_SIZE: int = 102400;
+static CONCURRENT_RESPONSESOR: int = 5;
+// The file chunk size for reading.
+static FILE_CHUNK_SIZE: int = 102400;
+// Byte size of LRU cache
+static CACHE_SIZE: uint = 256000000;
 
 struct sched_msg {
     priority: uint,
     stream: Option<std::rt::io::net::tcp::TcpStream>,
-    file_path: ~std::path::PosixPath
+    file_path: ~std::path::PosixPath,
+    file_size: uint
 }
 
 impl Ord for sched_msg {
@@ -47,21 +54,34 @@ impl Ord for sched_msg {
     }
 }
 
-struct Scheduler(PriorityQueue<sched_msg>);
+struct CacheManager{
+    cache: LRUCache<~str, ~[u8]>,
+    modified_map: HashMap<~str, u64>
+}
+
+impl CacheManager {
+    fn new() -> CacheManager { 
+        CacheManager {
+            cache: LRUCache::new(CACHE_SIZE),
+            modified_map: HashMap::new(),
+        }
+    }
+}
+
+struct Scheduler{
+    pqueue: PriorityQueue<sched_msg>
+}
 
 impl Scheduler {
     fn new() -> Scheduler { 
-        Scheduler(PriorityQueue::new())
+        Scheduler {
+            pqueue: PriorityQueue::new()
+        }
     }
 
     fn add_sched_msg(&mut self, mut sm: sched_msg) {
-        let file_size = match std::rt::io::file::stat(sm.file_path) {
-                            Some(s) => s.size as uint,
-                            None() => 0,
-        };
-        
         // A file with size smaller than 40 KByte should be responsed quickly 
-        let mut priority = file_size as uint / 20480;
+        let mut priority = sm.file_size as uint / 20480;
 
         let ip_s = match sm.stream {
             Some(ref mut stream) => {
@@ -80,7 +100,7 @@ impl Scheduler {
         }
         
         //println(fmt!("size: %u, priority: %u", file_size as uint, priority as uint));
-        self.push(sm);
+        self.pqueue.push(sm);
     }
 }
 
@@ -97,6 +117,9 @@ fn main() {
     let sched = Scheduler::new();
     let add_sched = arc::RWArc::new(sched);
     let do_sched = add_sched.clone();
+    
+    let cache_mgr = CacheManager::new();
+    let cache_mgr_arc = arc::RWArc::new(cache_mgr);
 
     let shared_v_count = arc::RWArc::new(visitor_count);
     
@@ -105,18 +128,19 @@ fn main() {
     let port = SharedPort::new(port);
 
     // Spawn multiple tasks to response the requests concurrently
-    for _ in range(0, CONCURRENT_RESPONSES) {
+    for _ in range(0, CONCURRENT_RESPONSESOR) {
         let child_port = port.clone();
         let do_sched = do_sched.clone();
+        let child_cache_arc = cache_mgr_arc.clone();
         
         do spawn {
             let (sm_port, sm_chan) = stream();
-            let mut buf = [0, .. RESPONSE_BUFFER_SIZE];
+            let mut buf = [0, .. FILE_CHUNK_SIZE];
             
             loop {
                 child_port.recv(); // wait for new request
                 do do_sched.write |sched| {
-                    match sched.maybe_pop() {
+                    match sched.pqueue.maybe_pop() {
                         None => { /* do nothing */ }
                         Some(msg) => {sm_chan.send(msg);}
                     }
@@ -126,6 +150,7 @@ fn main() {
                 println(fmt!("begin serving file [%?]", sm.file_path));
                                 
                 if sm.file_path.to_str().ends_with(".shtml") {
+                    sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n".as_bytes());
                     match io::file_reader(sm.file_path) {
                         Err(err) => { println(err); },
                         Ok(reader) => {
@@ -172,17 +197,68 @@ fn main() {
                     }
                     
                 } else {
-                    let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
                     sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    while (!file_reader.eof()) {
-                        match file_reader.read(buf) {
-                            Some(len) => {sm.stream.write(buf.slice(0, len));}
-                            None => {}
+                    if sm.file_size > CACHE_SIZE/2 {
+                        // no caching
+                        let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                        while (!file_reader.eof()) {
+                            match file_reader.read(buf) {
+                                Some(len) => {sm.stream.write(buf.slice(0, len));}
+                                None => {}
+                            }
+                        }
+                    } else { // caching read
+                        let last_modified = match file::stat(sm.file_path) {
+                            Some(file_stat) => file_stat.modified,
+                            None => 0
+                        };
+                        let path_str = sm.file_path.to_str();
+                        let mut need_update = true;
+                        
+                        do child_cache_arc.write |cache_mgr| {
+                            match cache_mgr.modified_map.find(&path_str) {
+                                Some(&modified_time) => {
+                                    if modified_time == last_modified {
+                                        match cache_mgr.cache.get(&path_str) {
+                                            Some(data) => {
+                                                // get cached file
+                                                // TODO: move the network IO operation out of the arc.
+                                                // downgrade read?
+                                                println("read from cache......................");
+                                                sm.stream.write(*data);
+                                                need_update = false;
+                                            }
+                                            None => ()
+                                        }
+                                    }
+                                }
+                                None => ()
+                            }
+                        }
+                        
+                        if need_update {
+                            
+                            let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                            let mut file_data: ~[u8] = ~[];
+                            
+                            while (!file_reader.eof()) {
+                                match file_reader.read(buf) {
+                                    Some(len) => {sm.stream.write(buf.slice(0, len)); file_data.push_all_move(buf.slice(0, len).to_owned());}
+                                    None => {}
+                                }
+                            }
+                            
+                            let (ptr_port, ptr_chan) = stream();
+                            ptr_chan.send(file_data);
+                            do child_cache_arc.write |cache_mgr| {
+                                let file_data = ptr_port.recv();
+                                cache_mgr.cache.put(path_str.clone(), file_data, sm.file_size);
+                                cache_mgr.modified_map.swap(path_str.clone(), last_modified);
+                            }
+                            println("add into cache");
                         }
                     }
                 }
-                
-                
                 println("finish serving");
             }
         }
@@ -240,7 +316,11 @@ fn main() {
                 else {
                     // may do scheduling here
                     // enqueue new request.
-                    let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone()};
+                    let file_size = match std::rt::io::file::stat(file_path) {
+                                        Some(s) => s.size as uint,
+                                        None() => 0,
+                    };
+                    let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone(), file_size: file_size};
                     let (sm_port, sm_chan) = std::comm::stream();
                     sm_chan.send(msg);
                     

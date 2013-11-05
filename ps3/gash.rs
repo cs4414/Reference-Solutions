@@ -2,6 +2,9 @@
 // gash module
 // Running on Rust 0.8
 
+#[link(name = "gash", vers = "0.1")];
+#[crate_type = "lib"];
+
 use std::{run, os, libc};
 use std::task;
 

@@ -69,17 +69,13 @@ impl CacheManager {
 }
 
 struct Scheduler{
-    pqueue: PriorityQueue<sched_msg>,
-    cache: LRUCache<~str, ~[u8]>,
-    modified_map: HashMap<~str, u64>
+    pqueue: PriorityQueue<sched_msg>
 }
 
 impl Scheduler {
     fn new() -> Scheduler { 
         Scheduler {
-            pqueue: PriorityQueue::new(),
-            cache: LRUCache::new(CACHE_SIZE),
-            modified_map: HashMap::new(),
+            pqueue: PriorityQueue::new()
         }
     }
 
@@ -202,7 +198,7 @@ fn main() {
                     
                 } else {
                     sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    if sm.file_size > CACHE_SIZE {
+                    if sm.file_size > CACHE_SIZE/2 {
                         // no caching
                         let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
                         while (!file_reader.eof()) {
@@ -227,8 +223,9 @@ fn main() {
                                             Some(data) => {
                                                 // get cached file
                                                 // TODO: move the network IO operation out of the arc.
-                                                sm.stream.write(*data);
+                                                // downgrade read?
                                                 println("read from cache......................");
+                                                sm.stream.write(*data);
                                                 need_update = false;
                                             }
                                             None => ()
@@ -239,47 +236,29 @@ fn main() {
                             }
                         }
                         
-                        
                         if need_update {
-                            /*
-                            let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
-                            let mut whole_file_data: ~[u8];
                             
-                            //sm.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                            let mut file_reader = file::open(sm.file_path, Open, Read).unwrap();
+                            let mut file_data: ~[u8] = ~[];
+                            
                             while (!file_reader.eof()) {
                                 match file_reader.read(buf) {
-                                    Some(len) => {sm.stream.write(buf.slice(0, len)); (*whole_file_data).append(buf.slice(0, len));}
+                                    Some(len) => {sm.stream.write(buf.slice(0, len)); file_data.push_all_move(buf.slice(0, len).to_owned());}
                                     None => {}
                                 }
                             }
-                            do do_sched.write |sched| {
-                                sched.cache.put(path_str.clone(), whole_file_data, whole_file_data.len());
-                                sched.modified_map.swap(path_str, last_modified);
-                            }
-                            */
-                        
-                            // TODO: avoid using read_whole_file()
-                            match io::read_whole_file(sm.file_path) {
-                                Ok(data) => {
-                                    sm.stream.write(data);
-                                    let data_cell = Cell::new(data);
-                                    let path_str_cell = Cell::new(path_str);
-                                    do child_cache_arc.write |cache_mgr| {
-                                        let data = data_cell.take();
-                                        let path_str = path_str_cell.take();
-                                        let file_size = data.len();
-                                        cache_mgr.cache.put(path_str.clone(), data, file_size);
-                                        cache_mgr.modified_map.swap(path_str, last_modified);
-                                    }
-                                }
-                                Err(err) => { println(err); }
-                            }
                             
+                            let (ptr_port, ptr_chan) = stream();
+                            ptr_chan.send(file_data);
+                            do child_cache_arc.write |cache_mgr| {
+                                let file_data = ptr_port.recv();
+                                cache_mgr.cache.put(path_str.clone(), file_data, sm.file_size);
+                                cache_mgr.modified_map.swap(path_str.clone(), last_modified);
+                            }
+                            println("add into cache");
                         }
                     }
                 }
-                
-                
                 println("finish serving");
             }
         }

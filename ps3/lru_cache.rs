@@ -1,3 +1,10 @@
+//
+// LRU Cache module
+// Running on Rust 0.8
+
+#[link(name = "lru_cache", vers = "0.1")];
+#[crate_type = "lib"];
+
 use std::hashmap::*;
 use std::ptr;
 use std::cast;

@@ -13,7 +13,7 @@ The starting code of ps3 uses io::read_whole_file(Path) to get the whole file da
 $ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
                                                     Duration Time (s)   Average Response Time (ms)
 zhtta-starting-code                                 823.545             352412.1
-zhtta-v1 (chunk buffer size of 512000 bytes)        131.198             70074.4
+zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
 
 ## Discussion
     * Which buffer size is the best? Figure it out by experiment.
@@ -85,7 +85,7 @@ zhtta-v3 (SPT scheduling)                            47.206	             19660.1
     * Are the optimal parameters fixed? Do the optimal parameters in previous versions apply to new versions with more features? Let's try!
 
 
-4. file caching: to minimize the bottleneck of disk IO
+4. File caching: to minimize the bottleneck of disk IO
     -VFS caching:
         pros: very cheap to implement
         cons: not so flexible in replacing cache items, could be affected by other programs, cache everyting whatever you want or not

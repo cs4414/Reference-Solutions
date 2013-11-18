@@ -3,6 +3,7 @@
 //
 // Running on Rust 0.8
 //
+// Towards PS3: SPT scheduling
 // Towards PS3: improving concurrency 
 // Towards PS3: eliminating long-blocked IO
 // 
@@ -23,6 +24,7 @@ use extra::arc;
 use std::comm::*;
 use extra::getopts::*;
 use std::vec;
+use extra::priority_queue::PriorityQueue;
 
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
@@ -32,7 +34,60 @@ static RESPONDER_CONCURRENCY: int = 5; // default amount of concurrent tasks
 
 struct sched_msg {
     stream: Option<std::rt::io::net::tcp::TcpStream>,
-    filepath: ~std::path::PosixPath
+    file_path: ~std::path::PosixPath,
+    file_size: uint,
+    priority: uint
+}
+
+impl Ord for sched_msg {
+    fn lt(&self, other: &sched_msg) -> bool {
+        if self.priority > other.priority { true } else { false }
+    }
+}
+
+struct Scheduler{
+    pqueue: PriorityQueue<sched_msg>
+}
+
+impl Scheduler {
+    fn new() -> Scheduler { 
+        Scheduler {
+            pqueue: PriorityQueue::new()
+        }
+    }
+    
+    fn is_wahoo(&mut self, ip_s: &str) -> bool {
+        if (ip_s.starts_with("128.143.") || ip_s.starts_with("137.54.") || ip_s.starts_with("172.26.") 
+                                         || ip_s.starts_with("50.134.")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    fn add_sched_msg(&mut self, mut sm: sched_msg) {
+        // A file with size smaller than 40 KByte should be responsed quickly 
+        let mut priority = sm.file_size as uint / 20480;
+
+        let ip_s = match sm.stream {
+            Some(ref mut stream) => {
+                match stream.peer_name() {
+                    Some(pn) => pn.ip.to_str(),
+                    None => "0".to_owned()
+                }
+            }
+            None => "0".to_owned()
+        };
+        
+        // Wahoo-First scheduling
+        if (self.is_wahoo(ip_s)) {
+            priority = (priority as f32 * 0.6) as uint;
+            sm.priority = priority;
+        }
+        
+        //println(fmt!("size: %u, priority: %u", file_size as uint, priority as uint));
+        self.pqueue.push(sm);
+    }
 }
 
 fn print_usage(program: &str, _opts: &[Opt]) {
@@ -91,18 +146,17 @@ fn main() {
     
     os::change_dir(&path::PosixPath(www_dir));
 
-    let req_vec: ~[sched_msg] = ~[];
-    let shared_req_vec = arc::RWArc::new(req_vec);
-    let add_vec = shared_req_vec.clone();
+    let sched = Scheduler::new();
+    let shared_sched = arc::RWArc::new(sched);
     
     let (port, chan) = stream();
     let chan = SharedChan::new(chan);
     let port = SharedPort::new(port);
     
     // dequeue file requests, and send responses.
-    // FIFO
+    // SPT
     for _ in range(0, concurrency) {
-        let take_vec = shared_req_vec.clone();
+        let child_shared_sched = shared_sched.clone();
         let port = port.clone();
         do spawn {
             let (sm_port, sm_chan) = stream();
@@ -111,21 +165,16 @@ fn main() {
             
             loop {
                 port.recv(); // wait for arrving notification
-                do take_vec.write |vec| {
-                    if ((*vec).len() > 0) {
-                        //println(fmt!("queue size before popping: %u", (*vec).len()));
-                        let tf_opt: Option<sched_msg> = (*vec).shift_opt();
-                        //println(fmt!("queue size after popping: %u", (*vec).len()));
-                        let tf = tf_opt.unwrap();
-
-                        //println(fmt!("shift from queue, size: %ud", (*vec).len()));
-                        sm_chan.send(tf); // send the request to send-response-task to serve.
+                do child_shared_sched.write |sched| {
+                    match sched.pqueue.maybe_pop() {
+                        None => { /* do nothing */ }
+                        Some(msg) => {sm_chan.send(msg);}
                     }
                 }
                 let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
                 // Print the serving file's name.
-                printfln!("%s", tf.filepath.components[tf.filepath.components.len()-1]);
-                let mut file_reader = file::open(tf.filepath, Open, Read).unwrap();
+                printfln!("%s", tf.file_path.components[tf.file_path.components.len()-1]);
+                let mut file_reader = file::open(tf.file_path, Open, Read).unwrap();
                 tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
                 while (!file_reader.eof()) {
                     match file_reader.read(file_chunk_buf) {
@@ -152,7 +201,7 @@ fn main() {
         //println(fmt!("new stream: %?", stream));
         // Start a new task to handle the each connection
         let child_chan = chan.clone();
-        let child_add_vec = add_vec.clone();
+        let child_shared_sched = shared_sched.clone();
         do spawn {
             unsafe {
                 visitor_count += 1;
@@ -187,20 +236,20 @@ fn main() {
                 }
                 else {
                     // Requests scheduling
-                    let msg: sched_msg = sched_msg{stream: stream, filepath: file_path.clone()};
+                    let file_size = match std::rt::io::file::stat(file_path) {
+                                        Some(s) => s.size as uint,
+                                        None() => 0,
+                    };
+                    let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone(), file_size: file_size};
                     let (sm_port, sm_chan) = std::comm::stream();
                     sm_chan.send(msg);
                     
-                    do child_add_vec.write |vec| {
+                    do child_shared_sched.write |sched| {
                         let msg = sm_port.recv();
-                        //println(fmt!("add to queue: %?", msg.filepath.filename().unwrap()));
-                        //println(fmt!("queue size before pushing: %u", (*vec).len()));
-                        (*vec).push(msg); // enqueue new request.
-                        //println(fmt!("queue size after pushing: %u", (*vec).len()));
-                        
+                        sched.add_sched_msg(msg);
+                        //println("new request added to queue");
                     }
-                    child_chan.send(""); //notify the new arriving request.
-                    //println(fmt!("get file request: %?", file_path));
+                    child_chan.send(""); //notify the new request in queue.
                 }
             }
             //println!("connection terminates")

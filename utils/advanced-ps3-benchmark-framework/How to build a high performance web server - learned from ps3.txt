@@ -68,22 +68,24 @@ zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
 
 The ps3 starting code schedules the http requests in FIFO manner. Obviously, if the earlier requests take too long to response, the waiting time of the latter requests as well as the average waiting time will increase. A Shortest Processing Time first (SPT) scheduling may help to minimize the average waiting time. However, the advantage of SPT is not always significant since it strongly depends on the request sequence. Sometimes it performs even worse than FIFO due to the potential bad implementation.
 
+## Modifications on the code:
+    * Added a new data structure to sort the processing time of each request.
 
 ## Preliminary result
-zhtta-v3:
-    (Performance comparing zhtta-v2)
-    Duration time: 1.2x 
-    Avg Response time: 1.1x 
+$ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
+                                                    Duration Time (s)   Average Response Time (ms)
+zhtta-starting-code                                 823.545             352412.1
+zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
+zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
+zhtta-v3 (SPT scheduling)                            47.206	             19660.1
+
 
 ## Discussion
     * In which scenario can SPT sheduling show its efficiency?
     * Are the optimal parameters fixed? Do the optimal parameters in previous versions apply to new versions with more features? Let's try!
 
-## Modifications on the code:
-    * Added a new data structure to sort the processing time of each request.
-    
 
-4. file caching: to eliminate the bottleneck of disk IO
+4. file caching: to minimize the bottleneck of disk IO
     -VFS caching:
         pros: very cheap to implement
         cons: not so flexible in replacing cache items, could be affected by other programs, cache everyting whatever you want or not
@@ -91,23 +93,23 @@ zhtta-v3:
         pros: be able to customize the replacement algorithm
         cons: need more code to implement
 
+## Preliminary result
+$ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
+                                                    Duration Time (s)   Average Response Time (ms)
+zhtta-starting-code                                 823.545             352412.1
+zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
+zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
+zhtta-v3 (SPT scheduling)                            47.206	             19660.1
+zhtta    (poor application caching)                  79.54	             40208.3
+
 ## Discussion
-    What's the upper bound of main memory caching performance? Get it by Ramdisk!
-    $ mkdir -p www-ram
-    $ sudo mount -t tmpfs -o size=1024M tmpfs /home/xuweilin/coder/rust/cs4414/Reference-Solutions/utils/ps3-benchmark-homedir/www-ram
-zhtta-v3 serving Ramdisk files :
-    (Performance comparing zhtta-v3 serving Harddisk files)
-    Duration time: x 
-    Avg Response time: x
+    * What's the upper bound of main memory caching performance? Get it by Ramdisk!
+        $ mkdir -p www-ram
+        $ sudo mount -t tmpfs -o size=1024M tmpfs /home/xuweilin/coder/rust/cs4414/Reference-Solutions/utils/ps3-benchmark-homedir/www-ram
+    On my computer there's no different results even if I ran zhtta on Ramdisk, because VFS caching had been taken advatage of the 8GB memory.
 
-
-
-zhtta-v4:
-    (Performance comparing zhtta-v3) (do the test on a limitted main memory machine.)
-    Duration time: x 
-    Avg Response time: x 
-
-
+    * Why the performance got worse after adding application-layer caching?
+      Answer: It's because the bad implementation.
     
 * What're the potential performance bottlenecks in improper implementation?
  - Put unnecessary code in critical sections, especially the IO operations with long latency.

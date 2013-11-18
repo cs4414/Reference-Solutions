@@ -1,0 +1,118 @@
+How to build a high performance web server
+                        ---- what we learned from ps3
+
+1. Eliminating long-blocked IO
+
+The starting code of ps3 uses io::read_whole_file(Path) to get the whole file data, than write it to a socket stream. However, read_whole_file() takes very long time to return when the requested file is large, consequently, it blocks the socket I/O for a long time. If we construct a loop to read small chunks of file data and write it to the socket stream immediately, the network resource can be utilized much better.
+
+## Modifications on the code:
+    * Added a file chunk buffer whose size can be specified by program arguement.
+    * Rewrote new code to replace io::read_whole_file(Path).
+
+## Preliminary result
+$ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
+                                                    Duration Time (s)   Average Response Time (ms)
+zhtta-starting-code                                 823.545             352412.1
+zhtta-v1 (chunk buffer size of 512000 bytes)        131.198             70074.4
+
+## Discussion
+    * Which buffer size is the best? Figure it out by experiment.
+        1KB, 10KB, 50KB, 100KB, 512KB, 1MB, 2MB, 4MB, 10MB, 50MB, 100MB, 512MB (should be the same as io::read_whole_file(Path))
+      - Buffer size too small => too many rounds of reading data into chunk buffer.
+      - Buffer size too large => long latency in each chunk reading operation, occupy too much memory.
+    
+    * Which API in Rust is betterr? Why?
+        Trait std::io::ReaderUtil  fn read_bytes(&self, len: uint) -> ~[u8];
+        Trait std::io::Reader      fn read(&self, bytes: &mut [u8], len: uint) -> uint;
+      Answer: The second one can be faster, because Rust can avoid allocating memory for the buffer in each iteration.
+    
+    * Why is io::read_whole_file(Path) so slow? It performed much worse even if we set a similar chunk size.
+      Answer: The reason could be found in the core part of the API:
+                while !self.eof() { bytes.push_all(self.read_bytes(2048u)); }
+                
+              vec::push_all() copies the new chunk data to the vector byte by byte, which is pretty slow.
+              ReaderUtil::read_bytes(2048u) returns an extra small chunk in each iteration, and it needs to allocate memory for each iteration, which is very very slow.
+
+
+2. Improving concurrency
+
+The ps3 starting code only has one responder task that takes requests from queue and do the response. Obviously, we can spawn more responder tasks to increase the resource utilization.
+
+## Modifications on the code:
+    * Added a loop to spawn several responder tasks.
+    * Cloned shared arcs for each spawned task.
+
+## Preliminary result
+$ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
+                                                    Duration Time (s)   Average Response Time (ms)
+zhtta-starting-code                                 823.545             352412.1
+zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
+zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
+
+
+## Discussion
+    * The higher concurrency, the better?
+      Answer:
+        No. Higher concurrency also means more resource are needed to maintain and manage the concurrent tasks.
+        Here's an extreme example:
+            single-task server, which has no concurrency
+            zhttpto server, which has unlimited concurrency
+        But, single-task server performs better in benchmark!
+        
+    * Which level of concurrency is the best in zhtta? Design and conduct an experiement to figure it out.
+        1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
+
+
+
+3. SPT scheduling
+
+The ps3 starting code schedules the http requests in FIFO manner. Obviously, if the earlier requests take too long to response, the waiting time of the latter requests as well as the average waiting time will increase. A Shortest Processing Time first (SPT) scheduling may help to minimize the average waiting time. However, the advantage of SPT is not always significant since it strongly depends on the request sequence. Sometimes it performs even worse than FIFO due to the potential bad implementation.
+
+
+## Preliminary result
+zhtta-v3:
+    (Performance comparing zhtta-v2)
+    Duration time: 1.2x 
+    Avg Response time: 1.1x 
+
+## Discussion
+    * In which scenario can SPT sheduling show its efficiency?
+    * Are the optimal parameters fixed? Do the optimal parameters in previous versions apply to new versions with more features? Let's try!
+
+## Modifications on the code:
+    * Added a new data structure to sort the processing time of each request.
+    
+
+4. file caching: to eliminate the bottleneck of disk IO
+    -VFS caching:
+        pros: very cheap to implement
+        cons: not so flexible in replacing cache items, could be affected by other programs, cache everyting whatever you want or not
+    -Application-layer caching:
+        pros: be able to customize the replacement algorithm
+        cons: need more code to implement
+
+## Discussion
+    What's the upper bound of main memory caching performance? Get it by Ramdisk!
+    $ mkdir -p www-ram
+    $ sudo mount -t tmpfs -o size=1024M tmpfs /home/xuweilin/coder/rust/cs4414/Reference-Solutions/utils/ps3-benchmark-homedir/www-ram
+zhtta-v3 serving Ramdisk files :
+    (Performance comparing zhtta-v3 serving Harddisk files)
+    Duration time: x 
+    Avg Response time: x
+
+
+
+zhtta-v4:
+    (Performance comparing zhtta-v3) (do the test on a limitted main memory machine.)
+    Duration time: x 
+    Avg Response time: x 
+
+
+    
+* What're the potential performance bottlenecks in improper implementation?
+ - Put unnecessary code in critical sections, especially the IO operations with long latency.
+    Solution: Use comm::stream() to pass the unshared resource out of the critcical scope.
+ - New tasks were blocked by IO operation
+ - Busy waiting for critical resource
+ - ...
+

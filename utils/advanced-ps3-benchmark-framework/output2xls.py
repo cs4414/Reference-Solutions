@@ -47,14 +47,13 @@ def add_title_to_ws(ws, line=0):
     ws.write(line, 5, "Error count")
     ws.write(line, 6, "Buffer size (KB)")
 
-def add_record_to_ws(ws, line, cid, rnd, dur, avg_resp, net_io, err, buf_size):
+def add_record_to_ws(ws, line, cid, rnd, dur, avg_resp, net_io, err):
     ws.write(line, 0, cid)
     ws.write(line, 1, rnd)
     ws.write(line, 2, dur)
     ws.write(line, 3, avg_resp)
     ws.write(line, 4, net_io)
     ws.write(line, 5, err)
-    ws.write(line, 6, buf_size)
 
 
 def main():
@@ -83,18 +82,23 @@ def main():
         report_name = file_name.split('/')[-1]
         #print res_name
         
-        res = re.search(r'([\w-]+)-([\d]+)KB-httperf-output-round([\d]+)\.txt', report_name)
+        res = re.search(r'([\w-]+)-httperf-output-round([\d]+)\.txt', report_name)
+        # concurrency test
+        #res = re.search(r'([\w-]+)-concurrency(\d+)-httperf-output-round([\d]+)\.txt', report_name)
+        #res = re.search(r'([\w-]+)-buffer(\d+)KB-httperf-output-round([\d]+)\.txt', report_name)
         if not res:
             continue
         computing_id = res.group(1)
-        buf_size = res.group(2)
-        round_num = int(res.group(3))
+        #buf_size = res.group(2)
+        #concurrency = int(res.group(2))
+        round_num = int(res.group(2))
         dur, avg_resp, net_io, err = parse_httperf_output(os.path.join(output_dir,report_name))
         
-        add_record_to_ws(ws, line, computing_id, round_num, dur, avg_resp, net_io, err, buf_size)
+        add_record_to_ws(ws, line, computing_id, round_num, dur, avg_resp, net_io, err)
         line += 1
 
     wb.save('result-various-buffer-size.xls')
+    #wb.save('buffer-size-results.xls')
         
         
 if __name__ == '__main__':

@@ -1,0 +1,6 @@
+
+Starting zhtta...
+Size of file chunk buffer: 536870912 bytes
+Serving at /home/xuweilin/coder/rust/cs4414/Reference-Solutions/utils/advanced-ps3-benchmark-framework/www
+task <unnamed> failed at 'assertion failed: `(left == right) && (right == left)` (left: `0i32`, right: `-98i32`)', /build/buildd/rust-0.8-0.8/src/libstd/rt/uv/net.rs:302
+task <unnamed> failed at 'receiving on closed channel', /build/buildd/rust-0.8-0.8/src/libstd/rt/comm.rs:487

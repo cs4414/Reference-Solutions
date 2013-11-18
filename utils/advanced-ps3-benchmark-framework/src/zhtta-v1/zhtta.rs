@@ -26,7 +26,7 @@ use std::vec;
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
-static FILE_CHUNK_BUF_SIZE: int = 512000; //bytes
+static FILE_CHUNK_BUF_SIZE: int = 512000;  // default size of buffer (bytes)
 
 struct sched_msg {
     stream: Option<std::rt::io::net::tcp::TcpStream>,

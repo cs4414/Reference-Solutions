@@ -99,11 +99,11 @@ zhtta-v3 (SPT scheduling)                            47.206	             19660.1
 Disk IO is often (if not always) a bottleneck in performance of different system. One of the most useful solutions is memory caching. 
 
     -VFS caching:
-        pros: very cheap to implement
-        cons: not so flexible in replacing cache items, could be affected by other programs, cache everyting whatever you want or not
+        pros: a free feature of Linux.
+        cons: not so flexible in replacing cache items, could be affected by other programs, cache everyting whatever you want or not.
     -Application-layer caching:
         pros: be able to customize the replacement algorithm
-        cons: need more code to implement
+        cons: need more code to implement.
 
 ## Preliminary result
 $ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
@@ -115,14 +115,16 @@ zhtta-v3 (SPT scheduling)                            47.206	             19660.1
 zhtta    (poor application caching)                  79.54	             40208.3
 
 ## Discussion
-    * What's the upper bound of main memory caching performance? Get it by Ramdisk!
-      
-        $ mkdir -p www-ram
-        $ sudo mount -t tmpfs -o size=1024M tmpfs /home/xuweilin/coder/rust/cs4414/Reference-Solutions/utils/ps3-benchmark-homedir/www-ram
-    On my computer, however, Ramdisk makes little difference, because VFS caching had been taken advatage of the 8GB memory.
-
     * Why the performance got worse after adding application-layer caching?
-      Answer: It's because the bad implementation. 
+      Answer: It's because the bad implementation. Some code in the application-layer caching module blocks the zhtta responder tasks. 
+      
+    * What's the upper bound of main memory caching performance? Get it by ramdisk!
+      Ramdisk could allocate a block of RAM and mount it as a disk. All of the file operations on the ramdisk actually take place on the main memory, and all the data will be erased after you restart the computer. You can eliminate the bottleneck of disk IO if you run zhtta on a ramdisk.
+      Here's the commands you need to create a 1GB ramdisk.
+        $ mkdir -p /home/student/www-ram
+        $ sudo mount -t tmpfs -o size=1024M tmpfs /home/student/www-ram
+      On my computer, however, Ramdisk makes little difference, because VFS caching had been taken advatage of the 8GB memory.
+    
     
 * What're the potential performance bottlenecks in improper implementation?
  - Put unnecessary code in critical sections, especially the IO operations with long latency.

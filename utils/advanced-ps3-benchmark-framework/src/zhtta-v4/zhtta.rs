@@ -3,6 +3,7 @@
 //
 // Running on Rust 0.8
 //
+// TODO - Towards PS3: application-layer file caching
 // Towards PS3: SPT scheduling
 // Towards PS3: improving concurrency 
 // Towards PS3: eliminating long-blocked IO

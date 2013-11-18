@@ -3,6 +3,7 @@
 //
 // Running on Rust 0.8
 //
+// Towards PS3: improving concurrency 
 // Towards PS3: eliminating long-blocked IO
 // 
 // Note: it would be very unwise to run this server on a machine that is
@@ -26,7 +27,8 @@ use std::vec;
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
-static FILE_CHUNK_BUF_SIZE: int = 512000; //bytes
+static FILE_CHUNK_BUF_SIZE: int = 512000; // default size of buffer (bytes)
+static RESPONDER_CONCURRENCY: int = 5; // default amount of concurrent tasks
 
 struct sched_msg {
     stream: Option<std::rt::io::net::tcp::TcpStream>,
@@ -77,10 +79,12 @@ fn main() {
     let ip_str = match matches.opt_str("ip") {Some(ip) => {ip}, None => {IP.to_owned()}};
     let port_int = get_arg_int_by_key(&matches, "port", PORT);
     let bufsize = get_arg_int_by_key(&matches, "bufsize", FILE_CHUNK_BUF_SIZE);
+    let concurrency = get_arg_int_by_key(&matches, "concurrency", RESPONDER_CONCURRENCY);
     let www_dir = match matches.opt_str("dir") {Some(dir) => {dir}, None => {"./".to_owned()}};
     
     println("\nStarting zhtta...");
     printfln!("Size of file chunk buffer: %d bytes", bufsize);
+    printfln!("Number of concurrent responders: %?", concurrency);
     printfln!("Serving at %s", path::PosixPath(www_dir).to_str());
     
     /* Finish processing program arguments and initiate the parameters. */
@@ -90,40 +94,44 @@ fn main() {
     let req_vec: ~[sched_msg] = ~[];
     let shared_req_vec = arc::RWArc::new(req_vec);
     let add_vec = shared_req_vec.clone();
-    let take_vec = shared_req_vec.clone();
     
     let (port, chan) = stream();
     let chan = SharedChan::new(chan);
+    let port = SharedPort::new(port);
     
     // dequeue file requests, and send responses.
     // FIFO
-    do spawn {
-        let (sm_port, sm_chan) = stream();
-        let mut file_chunk_buf: ~[u8] = vec::with_capacity(bufsize as uint);
-        unsafe {vec::raw::set_len(&mut file_chunk_buf, bufsize as uint);} // File_reader.read() doesn't recognize capacity, but len() instead. A wrong design?
-        
-        loop {
-            port.recv(); // wait for arrving notification
-            do take_vec.write |vec| {
-                if ((*vec).len() > 0) {
-                    //println(fmt!("queue size before popping: %u", (*vec).len()));
-                    let tf_opt: Option<sched_msg> = (*vec).shift_opt();
-                    //println(fmt!("queue size after popping: %u", (*vec).len()));
-                    let tf = tf_opt.unwrap();
+    for _ in range(0, concurrency) {
+        let take_vec = shared_req_vec.clone();
+        let port = port.clone();
+        do spawn {
+            let (sm_port, sm_chan) = stream();
+            let mut file_chunk_buf: ~[u8] = vec::with_capacity(bufsize as uint);
+            unsafe {vec::raw::set_len(&mut file_chunk_buf, bufsize as uint);} // File_reader.read() doesn't recognize capacity, but len() instead. A wrong design?
+            
+            loop {
+                port.recv(); // wait for arrving notification
+                do take_vec.write |vec| {
+                    if ((*vec).len() > 0) {
+                        //println(fmt!("queue size before popping: %u", (*vec).len()));
+                        let tf_opt: Option<sched_msg> = (*vec).shift_opt();
+                        //println(fmt!("queue size after popping: %u", (*vec).len()));
+                        let tf = tf_opt.unwrap();
 
-                    //println(fmt!("shift from queue, size: %ud", (*vec).len()));
-                    sm_chan.send(tf); // send the request to send-response-task to serve.
+                        //println(fmt!("shift from queue, size: %ud", (*vec).len()));
+                        sm_chan.send(tf); // send the request to send-response-task to serve.
+                    }
                 }
-            }
-            let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
-            // Print the serving file's name.
-            printfln!("%s", tf.filepath.components[tf.filepath.components.len()-1]);
-            let mut file_reader = file::open(tf.filepath, Open, Read).unwrap();
-            tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-            while (!file_reader.eof()) {
-                match file_reader.read(file_chunk_buf) {
-                    Some(len) => {tf.stream.write(file_chunk_buf.slice(0, len));}
-                    None => {}
+                let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
+                // Print the serving file's name.
+                printfln!("%s", tf.filepath.components[tf.filepath.components.len()-1]);
+                let mut file_reader = file::open(tf.filepath, Open, Read).unwrap();
+                tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                while (!file_reader.eof()) {
+                    match file_reader.read(file_chunk_buf) {
+                        Some(len) => {tf.stream.write(file_chunk_buf.slice(0, len));}
+                        None => {}
+                    }
                 }
             }
         }

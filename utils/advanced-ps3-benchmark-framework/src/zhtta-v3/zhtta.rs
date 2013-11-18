@@ -159,19 +159,18 @@ fn main() {
         let child_shared_sched = shared_sched.clone();
         let port = port.clone();
         do spawn {
-            let (sm_port, sm_chan) = stream();
             let mut file_chunk_buf: ~[u8] = vec::with_capacity(bufsize as uint);
             unsafe {vec::raw::set_len(&mut file_chunk_buf, bufsize as uint);} // File_reader.read() doesn't recognize capacity, but len() instead. A wrong design?
+            let mut tf: sched_msg = sched_msg{stream: None, file_path: ~os::getcwd().push(""), file_size: 0, priority: 0};
             
             loop {
                 port.recv(); // wait for arrving notification
                 do child_shared_sched.write |sched| {
                     match sched.pqueue.maybe_pop() {
                         None => { /* do nothing */ }
-                        Some(msg) => {sm_chan.send(msg);}
+                        Some(msg) => {tf = msg;}
                     }
                 }
-                let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
                 // Print the serving file's name.
                 printfln!("%s", tf.file_path.components[tf.file_path.components.len()-1]);
                 let mut file_reader = file::open(tf.file_path, Open, Read).unwrap();
@@ -182,6 +181,7 @@ fn main() {
                         None => {}
                     }
                 }
+                tf.stream = None; // Tell Rust we don't need the socket stream anymore, than it will be closed.
             }
         }
     }

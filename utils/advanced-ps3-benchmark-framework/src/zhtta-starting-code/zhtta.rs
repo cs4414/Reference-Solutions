@@ -99,23 +99,18 @@ fn main() {
     // dequeue file requests, and send responses.
     // FIFO
     do spawn {
-        let (sm_port, sm_chan) = stream();
-        
+        let mut tf: sched_msg = sched_msg{stream: None, filepath: ~os::getcwd().push("")};
         loop {
             port.recv(); // wait for arrving notification
+            
             do take_vec.write |vec| {
                 if ((*vec).len() > 0) {
-                    // LIFO didn't make sense in service scheduling, so we modify it as FIFO by using shift_opt() rather than pop().
                     //println(fmt!("queue size before popping: %u", (*vec).len()));
                     let tf_opt: Option<sched_msg> = (*vec).shift_opt();
                     //println(fmt!("queue size after popping: %u", (*vec).len()));
-                    let tf = tf_opt.unwrap();
-
-                    //println(fmt!("shift from queue, size: %ud", (*vec).len()));
-                    sm_chan.send(tf); // send the request to send-response-task to serve.
+                    tf = tf_opt.unwrap();
                 }
             }
-            let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
             match io::read_whole_file(tf.filepath) { // killed if file size is larger than memory size.
                 Ok(file_data) => {
                     // Print the serving file's name.
@@ -124,6 +119,7 @@ fn main() {
                     // A web server should always reply a HTTP header for any legal HTTP request.
                     tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
                     tf.stream.write(file_data);
+                    tf.stream = None; // Tell Rust we don't need the socket stream anymore, than it will be closed.
                     //println(fmt!("finish file [%?]", tf.filepath));
                 }
                 Err(err) => {

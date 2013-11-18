@@ -98,9 +98,9 @@ fn main() {
     // dequeue file requests, and send responses.
     // FIFO
     do spawn {
-        let (sm_port, sm_chan) = stream();
         let mut file_chunk_buf: ~[u8] = vec::with_capacity(bufsize as uint);
         unsafe {vec::raw::set_len(&mut file_chunk_buf, bufsize as uint);} // File_reader.read() doesn't recognize capacity, but len() instead. A wrong design?
+        let mut tf: sched_msg = sched_msg{stream: None, filepath: ~os::getcwd().push("")};
         
         loop {
             port.recv(); // wait for arrving notification
@@ -109,13 +109,10 @@ fn main() {
                     //println(fmt!("queue size before popping: %u", (*vec).len()));
                     let tf_opt: Option<sched_msg> = (*vec).shift_opt();
                     //println(fmt!("queue size after popping: %u", (*vec).len()));
-                    let tf = tf_opt.unwrap();
-
+                    tf = tf_opt.unwrap();
                     //println(fmt!("shift from queue, size: %ud", (*vec).len()));
-                    sm_chan.send(tf); // send the request to send-response-task to serve.
                 }
             }
-            let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
             // Print the serving file's name.
             printfln!("%s", tf.filepath.components[tf.filepath.components.len()-1]);
             let mut file_reader = file::open(tf.filepath, Open, Read).unwrap();
@@ -126,6 +123,7 @@ fn main() {
                     None => {}
                 }
             }
+            tf.stream = None; // Tell Rust we don't need the socket stream anymore, than it will be closed.
         }
     }
 

@@ -3,14 +3,13 @@
 //
 // Running on Rust 0.8
 //
-// Starting code for PS3
+// Towards PS3: eliminating long-blocked IO
 // 
 // Note: it would be very unwise to run this server on a machine that is
 // on the Internet and contains any sensitive files!
 //
 // University of Virginia - cs4414 Fall 2013
 // Weilin Xu and David Evans
-// Version 0.5
 
 extern mod extra;
 
@@ -18,14 +17,16 @@ use std::rt::io::*;
 use std::rt::io::net::ip::SocketAddr;
 use std::io::println;
 use std::cell::Cell;
-use std::{os, str, io, path};
+use std::{os, str, path};
 use extra::arc;
 use std::comm::*;
 use extra::getopts::*;
+use std::vec;
 
 static PORT:    int = 4414;
 static IP: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
+static FILE_CHUNK_BUF_SIZE: int = 512000; //bytes
 
 struct sched_msg {
     stream: Option<std::rt::io::net::tcp::TcpStream>,
@@ -75,13 +76,11 @@ fn main() {
     
     let ip_str = match matches.opt_str("ip") {Some(ip) => {ip}, None => {IP.to_owned()}};
     let port_int = get_arg_int_by_key(&matches, "port", PORT);
-    //let bufsize = get_arg_int_by_key(&matches, "bufsize", FILE_CHUNK_BUF_SIZE);
-    //let concurrency = get_arg_int_by_key(&matches, "concurrency", RESPONDER_CONCURRENCY);
+    let bufsize = get_arg_int_by_key(&matches, "bufsize", FILE_CHUNK_BUF_SIZE);
     let www_dir = match matches.opt_str("dir") {Some(dir) => {dir}, None => {"./".to_owned()}};
     
     println("\nStarting zhtta...");
-    //printfln!("Size of file chunk buffer: %d bytes", bufsize);
-    //printfln!("Number of concurrent responders: %?", concurrency);
+    printfln!("Size of file chunk buffer: %d bytes", bufsize);
     printfln!("Serving at %s", path::PosixPath(www_dir).to_str());
     
     /* Finish processing program arguments and initiate the parameters. */
@@ -100,12 +99,13 @@ fn main() {
     // FIFO
     do spawn {
         let (sm_port, sm_chan) = stream();
+        let mut file_chunk_buf: ~[u8] = vec::with_capacity(bufsize as uint);
+        unsafe {vec::raw::set_len(&mut file_chunk_buf, bufsize as uint);} // File_reader.read() doesn't recognize capacity, but len() instead. A wrong design?
         
         loop {
             port.recv(); // wait for arrving notification
             do take_vec.write |vec| {
                 if ((*vec).len() > 0) {
-                    // LIFO didn't make sense in service scheduling, so we modify it as FIFO by using shift_opt() rather than pop().
                     //println(fmt!("queue size before popping: %u", (*vec).len()));
                     let tf_opt: Option<sched_msg> = (*vec).shift_opt();
                     //println(fmt!("queue size after popping: %u", (*vec).len()));
@@ -116,18 +116,14 @@ fn main() {
                 }
             }
             let mut tf: sched_msg = sm_port.recv(); // wait for the dequeued request to handle
-            match io::read_whole_file(tf.filepath) { // killed if file size is larger than memory size.
-                Ok(file_data) => {
-                    // Print the serving file's name.
-                    printfln!("%s", tf.filepath.components[tf.filepath.components.len()-1]);
-
-                    // A web server should always reply a HTTP header for any legal HTTP request.
-                    tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    tf.stream.write(file_data);
-                    //println(fmt!("finish file [%?]", tf.filepath));
-                }
-                Err(err) => {
-                    println(err);
+            // Print the serving file's name.
+            printfln!("%s", tf.filepath.components[tf.filepath.components.len()-1]);
+            let mut file_reader = file::open(tf.filepath, Open, Read).unwrap();
+            tf.stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+            while (!file_reader.eof()) {
+                match file_reader.read(file_chunk_buf) {
+                    Some(len) => {tf.stream.write(file_chunk_buf.slice(0, len));}
+                    None => {}
                 }
             }
         }

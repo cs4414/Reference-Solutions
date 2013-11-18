@@ -16,6 +16,8 @@ $ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
 zhtta-starting-code                                 823.545             352412.1
 zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
 
+The improvement on performance was really significant after we changed the disk IO code!
+
 ## Discussion
     * Which buffer size is the best? Figure it out by experiment.
         1KB, 10KB, 50KB, 100KB, 512KB, 1MB, 2MB, 4MB, 10MB, 50MB, 100MB, 512MB (should be the same as io::read_whole_file(Path))
@@ -49,8 +51,9 @@ $ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
                                                     Duration Time (s)   Average Response Time (ms)
 zhtta-starting-code                                 823.545             352412.1
 zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
-zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
+zhtta-v2 (5 concurrent responder tasks)              48.079              20828.4
 
+The improvement on performance was really significant after we added more concurrent responder tasks.
 
 ## Discussion
     * The higher concurrency, the better?
@@ -82,6 +85,7 @@ zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
 zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
 zhtta-v3 (SPT scheduling)                            47.206	             19660.1
 
+The improvement on performance was not so significant after we replaced FIFO scheduling with SPT scheduling.
 
 ## Discussion
     * Why SPT scheduling didn't make much difference in the preliminary result? In which scenario can SPT sheduling show its significance?
@@ -94,17 +98,28 @@ zhtta-v3 (SPT scheduling)                            47.206	             19660.1
       sudo tc qdisc del dev lo root handle 1: htb default 12 
     
 
-4. File caching: to minimize the bottleneck of disk IO
+4. File caching
 
-Disk IO is often (if not always) a bottleneck in performance of different system. One of the most useful solutions is memory caching. 
-
-    -VFS caching:
+Disk IO is often (if not always) a performance bottleneck in various systems. One of the most useful solutions is memory caching. There're three approaches to implement file caching.
+    - VFS caching:
         pros: a free feature of Linux.
-        cons: not so flexible in replacing cache items, could be affected by other programs, cache everyting whatever you want or not.
-    -Application-layer caching:
-        pros: be able to customize the replacement algorithm
-        cons: need more code to implement.
+        cons: you cannot control the cache item replacement.
+              it could be affected by other programs
+              it caches everyting whatever you want or not.
+    - Ramdisk caching:
+        pros: a free feature of Linux.
+              you can create an application-exclusive ramdisk.
+              you can control the cache item by moving files between ramdisk and the real disk.
+        cons: it needs root privilege to execute several system commands.
+    - Application-layer caching:
+        pros: you can customize everything, such as the replacement algorithm.
+        cons: it needs more complicated code to implement.
 
+
+## Modifications on the code:
+    zhtta
+    * Implemented an application-layer cache management module.
+    
 ## Preliminary result
 $ httperf --server localhost --port 4414 --rate 500 --num-conns 1000
                                                     Duration Time (s)   Average Response Time (ms)
@@ -112,10 +127,10 @@ zhtta-starting-code                                 823.545             352412.1
 zhtta-v1 (chunk buffer size of 512000 bytes)        131.198              70074.4
 zhtta-v2 (5 concurrent responding tasks)             48.079              20828.4
 zhtta-v3 (SPT scheduling)                            47.206	             19660.1
-zhtta    (poor application caching)                  79.54	             40208.3
+zhtta    (poor application-layer caching)            79.54	             40208.3
 
 ## Discussion
-    * Why the performance got worse after adding application-layer caching?
+    * Why the performance got worse after adding the application-layer caching?
       Answer: It's because the bad implementation. Some code in the application-layer caching module blocks the zhtta responder tasks. 
       
     * What's the upper bound of main memory caching performance? Get it by ramdisk!

@@ -16,22 +16,76 @@
 extern mod extra;
 
 use std::rt::io::*;
-use std::rt::io::net::ip::{SocketAddr, Ipv4Addr};
+use std::rt::io::net::ip::{SocketAddr};
 use std::io::println;
 use std::cell::Cell;
 use std::task;
-use std::{os, str};
+use std::{os, str, path};
 use std::vec;
+use extra::getopts::*;
 
 static PORT:    int = 4414;
-static IPV4_LOOPBACK: &'static str = "127.0.0.1";
+static IP: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
 static FILE_CHUNK_BUF_SIZE: uint = 512000;  // default size of buffer (bytes)
 
+fn print_usage(program: &str, _opts: &[Opt]) {
+    printfln!("Usage: %s [options]", program);
+    println("--ip          \tIP");
+    println("--port        \tPORT");
+    println("--bufsize     \tFILE_CHUNK_BUF_SIZE");
+    println("--concurrency \tRESPONDER_CONCURRENCY");
+    println("--dir         \tWWW_DIR");
+    println("-h --help     \tUsage");
+}
+
+fn get_arg_int_by_key(matches: &Matches, key: &str, default: int) -> int {
+    let value : int = match matches.opt_str(key) {
+        Some(p) => { match from_str(p) { Some(i) => {i}, None => {default} } }
+        None() => { default } 
+    };
+    return value;
+}
+
 fn main() {
-    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: Ipv4Addr(127,0,0,1), port: PORT as u16});
+    /* Begin processing program arguments and initiate the parameters. */
+    let args = os::args();
+    let program = args[0].clone();
     
-    println(fmt!("Listening on tcp port %d ...", PORT));
+    let opts = ~[
+        optopt("ip"),
+        optopt("port"),
+        optopt("dir"),
+        optflag("h"),
+        optflag("help")
+    ];
+    let matches = match getopts(args.tail(), opts) {
+        Ok(m) => { m }
+        Err(f) => { fail!(f.to_err_msg()) }
+    };
+    if matches.opt_present("h") || matches.opt_present("help") {
+        print_usage(program, opts);
+        return;
+    }
+    
+    let ip_str = match matches.opt_str("ip") {Some(ip) => {ip}, None => {IP.to_owned()}};
+    let port_int = get_arg_int_by_key(&matches, "port", PORT);
+    let www_dir = match matches.opt_str("dir") {Some(dir) => {dir}, None => {"./".to_owned()}};
+    
+    println("\nStarting zhttpto...");
+    printfln!("Serving at %s", path::PosixPath(www_dir).to_str());
+    
+    /* Finish processing program arguments and initiate the parameters. */
+    
+    os::change_dir(&path::PosixPath(www_dir));
+    
+    let ip = match FromStr::from_str(ip_str) { Some(ip) => ip, 
+                                           None => { println(fmt!("Error: Invalid IP address <%s>", IP));
+                                                     return;},
+                                         };
+                                         
+    let socket = net::tcp::TcpListener::bind(SocketAddr {ip: ip, port: port_int as u16});
+    println(fmt!("Listening on %s:%d ...", ip_str, port_int));
     let mut acceptor = socket.listen().unwrap();
     
     // we can limit the incoming connection count.

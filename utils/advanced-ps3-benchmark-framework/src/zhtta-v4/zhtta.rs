@@ -3,7 +3,7 @@
 //
 // Running on Rust 0.8
 //
-// TODO - Towards PS3: application-layer file caching
+// Towards PS3: eliminating queuing overhead
 // Towards PS3: SPT scheduling
 // Towards PS3: improving concurrency 
 // Towards PS3: eliminating long-blocked IO
@@ -32,6 +32,8 @@ static IP: &'static str = "127.0.0.1";
 static mut visitor_count: uint = 0;
 static FILE_CHUNK_BUF_SIZE: int = 512000; // default size of buffer (bytes)
 static RESPONDER_CONCURRENCY: int = 5; // default amount of concurrent tasks
+static MAX_SIZE_WITHOUT_QUEUING: uint = 137500000; // 137.1 MByte = 22Gbps / 8 * 1000 *1000 * 1000 * 0.05 bytes
+//static MAX_SIZE_WITHOUT_QUEUING: uint = 500000; // 500000 Bytes = 80Mbps / 8 * 1000 *1000 * 0.05 bytes
 
 struct sched_msg {
     stream: Option<std::rt::io::net::tcp::TcpStream>,
@@ -236,21 +238,35 @@ fn main() {
                     stream.write(response.as_bytes());
                 }
                 else {
-                    // Requests scheduling
                     let file_size = match std::rt::io::file::stat(file_path) {
                                         Some(s) => s.size as uint,
                                         None() => 0,
                     };
-                    let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone(), file_size: file_size};
-                    let (sm_port, sm_chan) = std::comm::stream();
-                    sm_chan.send(msg);
-                    
-                    do child_shared_sched.write |sched| {
-                        let msg = sm_port.recv();
-                        sched.add_sched_msg(msg);
-                        //println("new request added to queue");
+                    if (file_size <= MAX_SIZE_WITHOUT_QUEUING) { // do response immediately
+                        let mut file_chunk_buf: ~[u8] = vec::with_capacity(bufsize as uint);
+                        unsafe {vec::raw::set_len(&mut file_chunk_buf, bufsize as uint);} // File_reader.read() doesn't recognize capacity, but len() instead. A wrong design?
+                        printfln!("%s", file_path.components[file_path.components.len()-1]);
+                        let mut file_reader = file::open(file_path, Open, Read).unwrap();
+                        stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                        while (!file_reader.eof()) {
+                            match file_reader.read(file_chunk_buf) {
+                                Some(len) => {stream.write(file_chunk_buf.slice(0, len));}
+                                None => {}
+                            }
+                        }
+                    } else { //queuing
+                        printfln!("enqueue: %s", file_path.components[file_path.components.len()-1])
+                        let msg: sched_msg = sched_msg{priority: 0, stream: stream, file_path: file_path.clone(), file_size: file_size};
+                        let (sm_port, sm_chan) = std::comm::stream();
+                        sm_chan.send(msg);
+                        
+                        do child_shared_sched.write |sched| {
+                            let msg = sm_port.recv();
+                            sched.add_sched_msg(msg);
+                            //println("new request added to queue");
+                        }
+                        child_chan.send(""); //notify the new request in queue.
                     }
-                    child_chan.send(""); //notify the new request in queue.
                 }
             }
             //println!("connection terminates")

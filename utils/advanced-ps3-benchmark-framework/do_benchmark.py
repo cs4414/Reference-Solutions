@@ -40,7 +40,7 @@ def run_cmd_bg(cmdpath, params, output_file_path = None):
 def main():
     #repo_name = 'cs4414-ps3'
     #csv_path = 'ps3-responses.csv'
-    www_dir = 'www'
+    www_dir = '/var/www'
     code_dir = "src"
     output_dir = "original-output"
     detailed_test = False
@@ -71,31 +71,18 @@ def main():
     if not os.path.isfile("zhtta-test-urls.txt"):
         os.system("wget http://www.cs.virginia.edu/~wx4ed/cs4414/ps3/zhtta-test-urls.txt")
         os.system("tr \"\\n\" \"\\0\" < zhtta-test-urls.txt > zhtta-test-urls.httperf")
+        
+    full_list = ['zhtta-starting-code', 'zhtta-v1', 'zhtta-v2', 'zhtta-v3', 'zhtta-v4', 'zhtta', 'zhttpto', 'apache']
+    test_cases = ['zhtta-v4', 'zhttpto']
+    filter_list = []
 
     for dirpath in os.listdir(code_dir):
         print "Entering", dirpath
         folder = os.path.splitext(dirpath)[0]
         ## Update your version filter here
-        '''
-        if folder != "zhtta-v1":
-            print "skip this version: ", folder
-            continue
         
-        
-        if folder == "zhtta-starting-code":
-            print "skip this version: ", folder, "TOO SLOW!!"
-            continue
-        if folder == "zhtta-v4":
-            print "skip this version: ", folder, "the same as zhtta-v3!!"
-            continue
-            
-        if folder != "zhtta-v1":
-            print "skip this version: ", folder
-            continue
-        '''
-        
-        if folder != "zhtta":
-            print "skip this version: ", folder, "the same as zhtta-v3!!"
+        if folder not in test_cases or folder in filter_list:
+            print "skip this case: ", folder
             continue
         
         os.chdir(os.path.join(os.path.join(benchmark_home_dir, code_dir), dirpath))
@@ -150,10 +137,12 @@ def main():
         elif detailed_test ==True and folder == "zhtta-v2": # different concurrency
             # Update your counter if you would like to do more test rounds based on the previous tests.
             round_count = 0
-            #for concurrency in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-            #for concurrency in [2048, 4096, 8192, 16384]:
+            #for concurrency in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]:
+            #for concurrency in [4096, 8192, 16384]:
             #for concurrency in [32768, 65536]:
-            for concurrency in [1048576, 2097152]:
+            #for concurrency in [1048576, 2097152]:
+            #for concurrency in [5, 32, 64]:
+            for concurrency in [5, 32, 64, 128, 256]:
                 round_count += 1
                 
                 params = "--concurrency %d " % concurrency
@@ -181,7 +170,12 @@ def main():
                     print "no input list for httperf, skip..."
                     continue
                 #print "httperf --server localhost --port 4414 --rate 60 --num-conns 60 --wlog=y,%s 2>%s 1>%s" % (request_list_path, httperf_err_output_path, httperf_output_path)
-                os.system("httperf --server localhost --port 4414 --rate 300 --num-conns 300 --wlog=y,%s 2>%s 1>%s" % (request_list_path, httperf_err_output_path, httperf_output_path))
+                
+                # preheat zhtta first.
+                print "preheating zhtta"
+                os.system("httperf --server localhost --port 4414 --rate 60 --num-conns 60 --wlog=y,%s > /dev/null 2>&1" % (request_list_path))
+                
+                os.system("httperf --server localhost --port 4414 --rate 500 --num-conns 1000 --wlog=y,%s 2>%s 1>%s" % (request_list_path, httperf_err_output_path, httperf_output_path))
                 
                 sys.stdout.flush()
                 sys.stderr.flush()
@@ -189,6 +183,10 @@ def main():
         
         
         else: # simple test
+            if folder == 'apache':
+                port_num = 80
+            else:
+                port_num = 4414
             params = "--dir %s" % os.path.join(benchmark_home_dir, www_dir)
             output_file_name = "%s-zhtta.output" % (folder.split()[0])
             output_file_path = os.path.join(benchmark_home_dir, os.path.join(output_dir, output_file_name))
@@ -205,8 +203,9 @@ def main():
             test_rounds[1] = {'rate': 60, 'reqs': 60}
             test_rounds[2] = {'rate': 60, 'reqs': 60}
             test_rounds[3] = {'rate': 500, 'reqs': 1000}
+            test_rounds[4] = {'rate': 500, 'reqs': 1000}
             
-            for round_num in [1, 2, 3]:
+            for round_num in [4]:
                 requests_rate = test_rounds[round_num]['rate']
                 requests_num = test_rounds[round_num]['reqs']
                 print "Httperf round%d - rate: %d, requests %d" % (round_num, requests_rate, requests_num)
@@ -221,11 +220,12 @@ def main():
                     print "no input list for httperf, skip..."
                     continue
                 #print "httperf --server localhost --port 4414 --rate 60 --num-conns 60 --wlog=y,%s 2>%s 1>%s" % (request_list_path, httperf_err_output_path, httperf_output_path)
-                os.system("httperf --server localhost --port 4414 --rate %d --num-conns %d --wlog=y,%s 2>%s 1>%s" % (requests_rate, requests_num, request_list_path, httperf_err_output_path, httperf_output_path))
+                os.system("httperf --server localhost --port %d --rate %d --num-conns %d --wlog=y,%s 2>%s 1>%s" % (port_num, requests_rate, requests_num, request_list_path, httperf_err_output_path, httperf_output_path))
                 
                 sys.stdout.flush()
                 sys.stderr.flush()
-            os.system("killall zhtta -s SIGINT")
+            #os.system("killall zhtta -s SIGINT")
+            os.system("killall zhtta")
 
 if  __name__ =='__main__':
     main()

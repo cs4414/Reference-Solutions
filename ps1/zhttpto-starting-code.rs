@@ -1,61 +1,62 @@
 //
 // zhttpto.rs
 //
-// University of Virginia - cs4414 Fall 2013
+// Starting code for PS1
+// Running on Rust 0.9
+//
+// Note that this code has serious security risks!  You should not run it 
+// on any system with access to sensitive files.
+// 
+// University of Virginia - cs4414 Spring 2014
 // Weilin Xu and David Evans
-// Version 0.1
+// Version 0.3
 
-extern mod extra;
+#[feature(globs)];
+use std::io::*;
+use std::io::net::ip::{SocketAddr};
+use std::{str};
 
-use extra::uv;
-use extra::{net_ip, net_tcp};
-use std::str;
-
-static BACKLOG: uint = 5;
-static PORT:    uint = 4414;
-static IPV4_LOOPBACK: &'static str = "127.0.0.1";
-
-fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: std::comm::SharedChan<Option<extra::net_tcp::TcpErrData>>)
-{
-    do spawn {
-        let accept_result = extra::net_tcp::accept(new_conn);
-        match accept_result {
-            Err(err) => {
-               println(fmt!("Connection error: %?", err));
-            },  
-            Ok(sock) => {
-                let peer_addr: ~str = net_ip::format_addr(&sock.get_peer_addr());
-                println(fmt!("Received connection from: %s", peer_addr));
-                
-                let read_result = net_tcp::read(&sock, 0u);
-                match read_result {
-                    Err(err) => {
-                        println(fmt!("Receive error: %?", err));
-                    },
-                    Ok(bytes) => {
-                        let request_str = str::from_bytes(bytes.slice(0, bytes.len() - 1));
-                        println(fmt!("Request received:\n%s", request_str));
-                        let response: ~str = ~
-                            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
-                             <doctype !html><html><head><title>Hello, Rust!</title>
-                             <style>body { background-color: #111; color: #FFEEAA }
-                                    h1 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red}
-                             </style></head>
-                             <body>
-                             <h1>Greetings, Rusty!</h1>
-                             </body></html>\r\n";
-
-                        net_tcp::write(&sock, response.as_bytes_with_null_consume());
-                    },
-                };
-            }
-        }
-    };
-}
+static IP: &'static str = "127.0.0.1";
+static PORT:        int = 4414;
 
 fn main() {
-    net_tcp::listen(net_ip::v4::parse_addr(IPV4_LOOPBACK), PORT, BACKLOG,
-                    &uv::global_loop::get(),
-                    |_chan| { println(fmt!("Listening on tcp port %u ...", PORT)); },
-                    new_connection_callback);
+    let addr = from_str::<SocketAddr>(format!("{:s}:{:d}", IP, PORT)).unwrap();
+    let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
+    
+    println(format!("Listening on [{:s}] ...", addr.to_str()));
+    
+    for stream in acceptor.incoming() {
+        // Spawn a task to handle the connection
+        do spawn {
+            let mut stream = stream;
+            
+            match stream {
+                Some(ref mut s) => {
+                             match s.peer_name() {
+                                Some(pn) => {println(format!("Received connection from: [{:s}]", pn.to_str()));},
+                                None => ()
+                             }
+                           },
+                None => ()
+            }
+            
+            let mut buf = [0, ..500];
+            stream.read(buf);
+            let request_str = str::from_utf8(buf);
+            println(format!("Received request :\n{:s}", request_str));
+            
+            let response: ~str = 
+                ~"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
+                 <doctype !html><html><head><title>Hello, Rust!</title>
+                 <style>body { background-color: #111; color: #FFEEAA }
+                        h1 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red}
+                        h2 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green}
+                 </style></head>
+                 <body>
+                 <h1>Greetings, Krusty!</h1>
+                 </body></html>\r\n";
+            stream.write(response.as_bytes());
+            println!("connection terminates ");
+        }
+    }
 }

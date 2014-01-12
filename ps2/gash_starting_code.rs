@@ -9,6 +9,7 @@
 // Version 0.3
 //
 
+// TODO: add support to gash arguments to make non-interactive tests easier.
 use std::{io, run};
 use std::io::buffered::BufferedReader;
 use std::io::stdin;

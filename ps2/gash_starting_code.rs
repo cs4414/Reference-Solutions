@@ -1,14 +1,32 @@
+//
+// gash.rs
+//
+// Starting code for PS2
+// Running on Rust 0.9
+//
+// University of Virginia - cs4414 Spring 2014
+// Weilin Xu, David Evans
+// Version 0.3
+//
+
 use std::{io, run};
+use std::io::buffered::BufferedReader;
+use std::io::stdin;
 
 fn main() {
     static CMD_PROMPT: &'static str = "gash > ";
     
+    let mut stdin = BufferedReader::new(stdin());
+    
     loop {
         print(CMD_PROMPT);
-        let line = io::stdin().read_line();
-        debug!(fmt!("line: %?", line));
-        let mut argv: ~[~str] = line.split_iter(' ').filter(|&x| x != "").transform(|x| x.to_owned()).collect();
-        debug!(fmt!("argv %?", argv));
+        io::stdio::flush();
+        
+        let line = stdin.read_line().unwrap();
+        let cmd_line = line.trim().to_owned();
+        
+        let mut argv: ~[~str] =
+            cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
         
         if argv.len() > 0 {
             let program = argv.remove(0);

@@ -9,7 +9,7 @@
 //
 // Special thanks to Kiet Tran for providing code we incorporated into this.
 // 
-// University of Virginia - cs4414 Fall 2013
+// University of Virginia - cs4414 Spring 2014
 // Weilin Xu and David Evans
 // Version 0.3
 #[feature(globs)];

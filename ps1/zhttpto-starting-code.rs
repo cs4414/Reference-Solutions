@@ -56,7 +56,7 @@ fn main() {
                  <h1>Greetings, Krusty!</h1>
                  </body></html>\r\n";
             stream.write(response.as_bytes());
-            println!("connection terminates ");
+            println!("Connection terminates.");
         }
     }
 }

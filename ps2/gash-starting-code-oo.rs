@@ -13,7 +13,6 @@ use std::{io, run};
 use std::io::buffered::BufferedReader;
 use std::io::stdin;
 
-    
 struct Shell {
     history: ~[~str],
     cmd_prompt: ~str,
@@ -35,7 +34,6 @@ impl Shell {
             io::stdio::flush();
             
             let line = stdin.read_line().unwrap();
-            
             let cmd_line = line.trim().to_owned();
             
             if cmd_line.len() > 0 {

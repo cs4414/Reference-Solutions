@@ -4,7 +4,7 @@
 // Reference solution for PS2
 // Running on Rust 0.9
 //
-// University of Virginia - cs4414 Fall 2013
+// University of Virginia - cs4414 Spring 2014
 // Weilin Xu, David Evans
 // Version 0.3
 //
@@ -53,13 +53,36 @@ fn exit(status: libc::c_int) {
     unsafe { libc::exit(status); }
 }
 
+fn cmdline2argv(cmd_line: &str) -> ~[~str] {
+    //let argv: ~[~str] = 
+    //        cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+    
+    let mut argv: ~[~str] = ~[];
+    let group: ~[~str] =
+        cmd_line.split('"').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+    for i in range(0, group.len()) {
+        if i % 2 == 0 {
+            // split by " "
+            argv.push_all_move(group[i].split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec());
+        } else {
+            argv.push(group[i].clone());
+        }
+    
+    }
+    
+    return argv;
+}
+
 fn handle_cmd(cmd_line: &str, pipe_in: libc::c_int, pipe_out: libc::c_int, pipe_err: libc::c_int, bg: bool) {
     let mut out_fd = pipe_out;
     let mut in_fd = pipe_in;
     let err_fd = pipe_err;
     
-    let mut argv: ~[~str] =
-        cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+    //let mut argv: ~[~str] =
+    //    cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+    
+    let mut argv = cmdline2argv(cmd_line);
+    
     let mut i = 0;
     // found problem on redirection
     // `ping google.com | grep 1 > ping.txt &` didn't work

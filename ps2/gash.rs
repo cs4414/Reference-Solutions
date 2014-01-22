@@ -58,7 +58,7 @@ impl Shell {
                 let program = argv.remove(0);
                 match program {
                     // no need to parse the arguements for several internal commands.   
-                    ~"exit"     =>  { unsafe { libc::exit(1); } }//return; }
+                    ~"exit"     =>  { self.exit(0); }
                     
                     ~"history"  =>  {
                                         for i in range(0, self.history.len()) {
@@ -252,6 +252,10 @@ impl Shell {
                 println("Warning: registering signal handler fails.");
             }
         }
+    }
+    
+    fn exit(&mut self, status: int) {
+        unsafe { libc::exit(status as i32); } 
     }
 }
 

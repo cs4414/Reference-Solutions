@@ -1,7 +1,26 @@
-curl "http://en.wikipedia.org/wiki/Pipeline_(Unix)" | \
-sed 's/[^a-zA-Z ]/ /g' | \
-tr 'A-Z ' 'a-z\n' | \
-grep '[a-z]' | \
-sort -u | \
-comm -23 - /usr/share/dict/words | \
-less
+# basic commands
+cd /
+history
+
+# background process
+ping google.com &
+ping facebook.com &
+
+# redirection
+ifconfig > netcfg.txt
+cat < netcfg.txt
+
+# simple pipeline
+ping googlecom | grep 1
+ifconfig | tail
+
+
+# advanced pipeline & arguments parsing
+curl "http://rust-class.org/pages/ps2.html" | sed "s/[^a-zA-Z ]/ /g" | tr "A-Z " "a-z\n"| grep "[a-z]" | sort -u
+
+# signal handling
+ping google.com
+<Ctrl + C>
+
+# exit
+exit

@@ -75,8 +75,8 @@ impl Shell {
         }
     }
     
-    // run command line, called by self.run() or external -n parameter.
-    // You will need to update this method to support more complex shell features.
+    // run command line, called by self.run() or external -c parameter.
+    // You will need to update this function to support more complex shell features.
     fn run_cmdline(&mut self, cmd_line: &str) {
         // handle background sign &
         let mut bg_flag = false;
@@ -199,7 +199,7 @@ impl Shell {
     
     // input: a single command line
     // output: a vector of arguments. The program name is put in the first place.
-    // notes: arguments can be separated by space(s), "", ''  
+    // notes: arguments can be separated by space(s), ""  
     fn parse_argv(&mut self, cmd_line: &str) -> ~[~str] {
         //let argv: ~[~str] = 
         //        cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();

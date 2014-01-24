@@ -54,10 +54,6 @@ fn main() {
             if req_group.len() > 2 {
                 let path_str = "." + req_group[1].to_owned();
                 println(format!("Request for path: \n{:?}", path_str));
-    
-                //while path_str.find_str("/../") != None  {
-                //    path_str = path_str.replace("/../", "/");
-                //}
                 
                 let mut path_obj = os::getcwd();
                 path_obj.push(path_str.clone());
@@ -82,7 +78,14 @@ fn main() {
                     stream.write(response.as_bytes());
                 } else if path_str.find_str("/../") != None || ext_name != "html" {
                     println("403 forbidden");
-                    let response = ~"HTTP/1.1 403 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n Forbidden";
+                    let response = ~"HTTP/1.1 403 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n 
+                                    <doctype !html><html><head><title>403 Forbidden</title>
+                                    <body>
+                                    <h1>403 Forbidden!</h1>
+                                    <p>You don't have permission to access the confidential files in CS4414.</p>
+                                    <hr>
+                                    <address>Zhttpto/0.3 (Ubuntu) Rust/0.9 Server at 127.0.0.1 Port 4414</address>
+                                    </body></html>\r\n";
                     stream.write(response.as_bytes());
                 } else {
                     println(format!("serve file: {:s}", path_str));

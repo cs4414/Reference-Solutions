@@ -50,27 +50,20 @@ impl Shell {
                 self.history.push(cmd_line.to_owned());
             }
             
-            // preliminary parsing, just get the program name.
-            let mut argv: ~[~str] =
-                cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+            let program = cmd_line.splitn(' ', 1).nth(0).expect("no program");
         
-            if argv.len() > 0 {
-                let program = argv.remove(0);
-                match program {
-                    // no need to parse the arguements for several internal commands.   
-                    ~"exit"     =>  { self.exit(0); }
-                    
-                    ~"history"  =>  {
-                                        for i in range(0, self.history.len()) {
-                                            println(format!("{:u} {:s}", i+1, self.history[i]));
-                                        }
+            match program {
+                // no need to parse the arguements for several internal commands.   
+                ""          =>  { continue; }
+                "exit"      =>  { self.exit(0); }
+                "help"      =>  { println("This is a new shell implemented in Rust!") }
+                "history"   =>  {
+                                    for i in range(0, self.history.len()) {
+                                        println(format!("{:u} {:s}", i+1, self.history[i]));
                                     }
-                    
-                    ~"help"     => { println("This is a new shell implemented in Rust!") }
-                    
-                    _           =>  { self.run_cmdline(cmd_line); }
-                    
-                }
+                                }
+                _           =>  { self.run_cmdline(cmd_line); }
+                
             }
         }
     }

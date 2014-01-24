@@ -36,19 +36,12 @@ impl Shell {
             
             let line = stdin.read_line().unwrap();
             let cmd_line = line.trim().to_owned();
+            let program = cmd_line.splitn(' ', 1).nth(0).expect("no program");
             
-            // preliminary parsing, just get the program name.
-            let mut argv: ~[~str] =
-                cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
-        
-            if argv.len() > 0 {
-                let program = argv.remove(0);
-                match program {
-                    ~"exit"     =>  { return; }
-                    // no need to parse the arguements for internal commands.   
-                    _           =>  { self.run_cmd(program, argv); }
-                    
-                }
+            match program {
+                ""      =>  { continue; }
+                "exit"  =>  { return; }
+                _       =>  { self.run_cmdline(cmd_line); }
             }
         }
     }

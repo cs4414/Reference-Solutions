@@ -48,16 +48,26 @@ fn main() {
             let mut buf = [0, ..500];
             stream.read(buf);
             let request_str = str::from_utf8(buf);
+            println(format!("Received request:\n{:s}", request_str));
             
             let req_group : ~[&str]= request_str.splitn(' ', 3).collect();
             if req_group.len() > 2 {
-                let path_str = req_group[1];
+                let path_str = "." + req_group[1].to_owned();
                 println(format!("Request for path: \n{:?}", path_str));
+    
+                //while path_str.find_str("/../") != None  {
+                //    path_str = path_str.replace("/../", "/");
+                //}
                 
                 let mut path_obj = os::getcwd();
-                path_obj.push("."+path_str);
+                path_obj.push(path_str.clone());
+                
+                let ext_name = match path_obj.extension_str() {
+                    Some(e) => e,
+                    None => "",
+                };
+                
                 if !path_obj.exists() || path_obj.is_dir() {
-                    println(format!("Received request:\n{:s}", request_str));
                     let response: ~str = 
                         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
                          <doctype !html><html><head><title>Hello, Rust!</title>
@@ -69,11 +79,14 @@ fn main() {
                          <h1>Greetings, Krusty!</h1>
                          <h2>Visitor count: {0:u}</h2>
                          </body></html>\r\n", unsafe{visitor_count});
-
                     stream.write(response.as_bytes());
-                }
-                else {
+                } else if path_str.find_str("/../") != None || ext_name != "html" {
+                    println("403 forbidden");
+                    let response = ~"HTTP/1.1 403 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n Forbidden";
+                    stream.write(response.as_bytes());
+                } else {
                     println(format!("serve file: {:s}", path_str));
+                    stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
 
                     let contents = File::open(&path_obj).read_to_end();
                     stream.write(contents);

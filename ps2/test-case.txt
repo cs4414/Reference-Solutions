@@ -11,11 +11,16 @@ ifconfig > netcfg.txt
 cat < netcfg.txt
 
 # simple pipeline
-ping googlecom | grep 1
+ping google.com | grep 1
+# Notes: The reasons for failure may include:
+#   1) Implementing piping as file redirection;
+
 ifconfig | tail
+# Notes: The reasons for failure may include:
+#   1) The pipeline ends were not closed properly;
 
-
-# advanced pipeline & arguments parsing
+# Advanced pipeline & arguments parsing
+# This command line will output the vocabulary of the ps2 notes.
 curl "http://rust-class.org/pages/ps2.html" | sed "s/[^a-zA-Z ]/ /g" | tr "A-Z " "a-z\n"| grep "[a-z]" | sort -u
 
 # signal handling

@@ -229,9 +229,7 @@ impl Shell {
         let fgpid = self.fg_pid;
         self.fg_pid = -1;
 
-        do spawn {
-            //TODO: move listener into struct Shell as a member.
-            //TODO: How to reference struct menmbers in task?
+        spawn(proc() {
             //TODO: Unregister the listener once exit.
             let mut listener = Listener::new();
             let ret = listener.register(Interrupt);
@@ -246,7 +244,8 @@ impl Shell {
             } else {
                 println("Warning: registering signal handler fails.");
             }
-        }
+            }
+        );
     }
     
     fn exit(&mut self, status: int) {

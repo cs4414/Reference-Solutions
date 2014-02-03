@@ -18,12 +18,10 @@ use extra::getopts;
 use std::io::signal::{Listener, Interrupt};
 use std::libc::funcs::posix88::signal;
 
-// The PID of the frontground program. The initiate value -1 means invalid.
-static mut fg_pid: libc::pid_t = -1;
-
 struct Shell {
     history: ~[~str],
     cmd_prompt: ~str,
+    fg_pid: libc::pid_t
 }
 
 impl Shell {
@@ -31,6 +29,7 @@ impl Shell {
         Shell {
             history: ~[],
             cmd_prompt: prompt_str.to_owned(),
+            fg_pid: -1,
         }
     }
     
@@ -168,7 +167,7 @@ impl Shell {
                                     if err_fd != 2 {os::close(err_fd);}
 
                                      if !bg {
-                                        unsafe{fg_pid = prog.get_id();}
+                                        self.fg_pid = prog.get_id();
                                         prog.finish();
                                         io::stdio::flush();
                                         //println(program + " terminated.");
@@ -199,7 +198,7 @@ impl Shell {
         
         let mut argv: ~[~str] = ~[];
         let group: ~[~str] =
-            cmd_line.split('"').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+            cmd_line.split('\"').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
         for i in range(0, group.len()) {
             if i % 2 == 0 {
                 // split by " "
@@ -227,6 +226,9 @@ impl Shell {
     }
     
     fn register_signal_handler(&mut self) {
+        let fgpid = self.fg_pid;
+        self.fg_pid = -1;
+
         do spawn {
             //TODO: move listener into struct Shell as a member.
             //TODO: How to reference struct menmbers in task?
@@ -234,10 +236,10 @@ impl Shell {
             let mut listener = Listener::new();
             let ret = listener.register(Interrupt);
             
-            if ret == true {
+            if ret {
                 loop {
                     match listener.port.recv() {
-                        Interrupt => unsafe { if fg_pid != -1 {signal::kill(fg_pid, libc::SIGINT); fg_pid = -1;} },
+                        Interrupt => { if fgpid != -1 { unsafe { signal::kill(fgpid, libc::SIGINT); }}},
                         _ => (),
                     }
                 }
@@ -293,6 +295,6 @@ fn main() {
     
     match opt_cmd_line {
         Some(cmd_line) => Shell::new("").run_cmdline(cmd_line),
-        None           => Shell::new("gash > ").run()
+        None           => Shell::new("gash> ").run()
     }
 }

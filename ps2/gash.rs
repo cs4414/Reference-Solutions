@@ -227,7 +227,6 @@ impl Shell {
     
     fn register_signal_handler(&mut self) {
         let fgpid = self.fg_pid;
-        self.fg_pid = -1;
 
         spawn(proc() {
             //TODO: Unregister the listener once exit.

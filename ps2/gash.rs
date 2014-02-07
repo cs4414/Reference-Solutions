@@ -16,12 +16,10 @@ use std::io::buffered::BufferedReader;
 use std::io::stdin;
 use extra::getopts;
 use std::io::signal::{Listener, Interrupt};
-use std::libc::funcs::posix88::signal;
 
 struct Shell {
     history: ~[~str],
     cmd_prompt: ~str,
-    fg_pid: libc::pid_t
 }
 
 impl Shell {
@@ -29,7 +27,6 @@ impl Shell {
         Shell {
             history: ~[],
             cmd_prompt: prompt_str.to_owned(),
-            fg_pid: -1,
         }
     }
     
@@ -167,7 +164,6 @@ impl Shell {
                                     if err_fd != 2 {os::close(err_fd);}
 
                                      if !bg {
-                                        self.fg_pid = prog.get_id();
                                         prog.finish();
                                         io::stdio::flush();
                                         //println(program + " terminated.");
@@ -226,7 +222,6 @@ impl Shell {
     }
     
     fn register_signal_handler(&mut self) {
-        let fgpid = self.fg_pid;
 
         spawn(proc() {
             //TODO: Unregister the listener once exit.
@@ -236,7 +231,7 @@ impl Shell {
             if ret {
                 loop {
                     match listener.port.recv() {
-                        Interrupt => { if fgpid != -1 { unsafe { signal::kill(fgpid, libc::SIGINT); }}},
+                        Interrupt => (), // Do nothing, just prevent gash from terminating.
                         _ => (),
                     }
                 }

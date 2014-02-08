@@ -1,12 +1,11 @@
 //
 // gash.rs
 //
-// Starting code for PS2
-// Running on Rust 0.9
+// Reference solution for PS2 (Rust 0.9)
 //
 // University of Virginia - cs4414 Spring 2014
 // Weilin Xu, David Evans
-// Version 0.4
+// Version 0.5
 //
 
 extern mod extra;
@@ -30,7 +29,6 @@ impl Shell {
         }
     }
     
-    // run shell
     fn run(&mut self) {
         self.register_signal_handler();
         let mut stdin = BufferedReader::new(stdin());
@@ -65,43 +63,33 @@ impl Shell {
     }
     
     // run command line, called by self.run() or external -c parameter.
-    // You will need to update this function to support more complex shell features.
     fn run_cmdline(&mut self, cmd_line: &str) {
-        // handle background sign &
-        let mut bg_flag = false;
+        // handle background commands using &
+        let mut bg_flag;
         let mut cmd_line: ~str = cmd_line.to_owned();
         if cmd_line.ends_with("&") {
-            cmd_line = cmd_line.trim_right_chars(&'&').to_owned();
             bg_flag = true;
+            cmd_line = cmd_line.trim_right_chars(&'&').to_owned();
+        } else {
+            bg_flag = false;
         }
         
-        // handle pipelines
+        // handle pipelines 
         let progs: ~[~str] =
             cmd_line.split('|').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
         
         let mut pipes: ~[os::Pipe] = ~[];
         
         // create pipes
-        if (progs.len() > 1) {
-            for _ in range(0, progs.len()-1) {
-                pipes.push(os::pipe());
-            }
+        pipes.push(os::Pipe { input: 0, out: 0 }); // first pipe is standard input
+        for _ in range(0, progs.len() - 1) {
+            pipes.push(os::pipe());
         }
+        pipes.push(os::Pipe { input: 1, out: 1 }); // last is standard output
         
-        if progs.len() == 1 {
-            self.run_single_cmd(progs[0], 0, 1, 2, bg_flag);
-        } else {
-            for i in range(0, progs.len()) {
-                let prog = progs[i].to_owned();
-                
-                if i == 0 { // the first one
-                    self.run_single_cmd(prog, 0, pipes[i].out, 2, true);
-                } else if i == progs.len() - 1 { // the last one
-                    self.run_single_cmd(prog, pipes[i-1].input, 1, 2, bg_flag);
-                } else { // the middle ones
-                    self.run_single_cmd(prog, pipes[i-1].input, pipes[i].out, 2, true);
-                }
-            }
+        for i in range(0, progs.len()) {
+            self.run_single_cmd(progs[i], pipes[i].input, pipes[i+1].out, 2, 
+                                if (i == progs.len() - 1) { bg_flag } else { true }); // all in bg except possibly last one
         }
     }
     
@@ -145,59 +133,51 @@ impl Shell {
         let program = argv.remove(0);
         match program {
             ~"cd"       => { if argv.len()>0 { os::change_dir(&path::Path::new(argv[0])); } }
-            _           => {    if !self.cmd_exists(program) {
-                                    println!("{:s}: command not found", program);
-                                    return;
-                                } else {
-                                    //println!("Program: {:s}, in_fd: {:d}, out_fd: {:d}, err_fd: {:d}", program, in_fd, out_fd, err_fd);
-                                    let opt_prog = run::Process::new(program, argv, run::ProcessOptions {
-                                                                                                env: None,
-                                                                                                dir: None,
-                                                                                                in_fd: Some(in_fd),
-                                                                                                out_fd: Some(out_fd),
-                                                                                                err_fd: Some(err_fd)
-                                                                                            });
+            _           => { if !self.cmd_exists(program) {
+                                 println!("{:s}: command not found", program);
+                                 return;
+                             } else {
+                                 // To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="gash=debug" 
+                                 debug!("Program: {:s}, in_fd: {:d}, out_fd: {:d}, err_fd: {:d}", program, in_fd, out_fd, err_fd);
+                                 let opt_prog = run::Process::new(program, argv, 
+                                                                  run::ProcessOptions { env: None, dir: None,
+                                                                                        in_fd: Some(in_fd), out_fd: Some(out_fd), err_fd: Some(err_fd)
+                                                                                      });
                                     
-                                    let mut prog = opt_prog.expect("Error: creating process error.");
-                                    if in_fd != 0 {os::close(in_fd);}
-                                    if out_fd != 1 {os::close(out_fd);}
-                                    if err_fd != 2 {os::close(err_fd);}
+                                 let mut prog = opt_prog.expect("Error: creating process error.");
+                                 if in_fd != 0 {os::close(in_fd);}
+                                 if out_fd != 1 {os::close(out_fd);}
+                                 if err_fd != 2 {os::close(err_fd);}
 
-                                     if !bg {
-                                        prog.finish();
+                                 if !bg {
+                                     prog.finish();
+                                     io::stdio::flush();
+                                     debug!("Terminated fg program: {:}", program);
+                                 } else {
+                                     let (p_port, p_chan) = Chan::new();
+                                     p_chan.send(prog);
+                                     spawn(proc() {
+                                        let mut prog: run::Process = p_port.recv();
+                                           
+                                        prog.finish(); 
                                         io::stdio::flush();
-                                        //println(program + " terminated.");
-                                        
-                                     } else {
-                                        let (p_port, p_chan) = Chan::new();
-                                        p_chan.send(prog);
-                                        do spawn {
-                                            let mut prog: run::Process = p_port.recv();
-                                            
-                                            prog.finish(); 
-                                            io::stdio::flush();
-                                            //println(program + " terminated.");
-                                        }
-                                     }
-                                 }
+                                        debug!("Terminated bg program: {:}", program);
+                                     });
+                                }
                             }
-        }//match program
-    
-    }
+                      }                 
+        } // match program
+    } // run_single_cmd
     
     // input: a single command line
-    // output: a vector of arguments. The program name is put in the first place.
+    // output: a vector of arguments. The program name is put in the first position.
     // notes: arguments can be separated by space(s), ""  
     fn parse_argv(&mut self, cmd_line: &str) -> ~[~str] {
-        //let argv: ~[~str] = 
-        //        cmd_line.split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
-        
         let mut argv: ~[~str] = ~[];
-        let group: ~[~str] =
-            cmd_line.split('\"').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
-        for i in range(0, group.len()) {
-            if i % 2 == 0 {
-                // split by " "
+        let group: ~[~str] = cmd_line.split('\"').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec();
+
+        for i in range(0, group.len()) {            
+            if i % 2 == 0 { // split by " "
                 argv.push_all_move(group[i].split(' ').filter_map(|x| if x != "" { Some(x.to_owned()) } else { None }).to_owned_vec());
             } else {
                 argv.push(group[i].clone());
@@ -205,12 +185,11 @@ impl Shell {
         
         }
         
-        return argv;
+        argv
     }
     
     fn cmd_exists(&mut self, cmd_path: &str) -> bool {
-        let ret = run::process_output("which", [cmd_path.to_owned()]);
-        return ret.expect("exit code error.").status.success();
+        run::process_output("which", [cmd_path.to_owned()]).expect("exit code error.").status.success()
     }
     
     fn get_fd(&mut self, fpath: &str, mode: &str) -> libc::c_int {
@@ -222,9 +201,8 @@ impl Shell {
     }
     
     fn register_signal_handler(&mut self) {
-
         spawn(proc() {
-            //TODO: Unregister the listener once exit.
+            // TODO: Should unregister the listener at exit.
             let mut listener = Listener::new();
             let ret = listener.register(Interrupt);
             
@@ -238,8 +216,7 @@ impl Shell {
             } else {
                 println("Warning: registering signal handler fails.");
             }
-            }
-        );
+       });
     }
     
     fn exit(&mut self, status: int) {
@@ -263,30 +240,29 @@ fn get_cmdline_from_args() -> Option<~str> {
         getopts::optflag("h"),
         getopts::optflag("help")
     ];
+
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m }
         Err(f) => { fail!(f.to_err_msg()) }
     };
+
     if matches.opt_present("h") || matches.opt_present("help") {
         print_usage(program);
         unsafe { libc::exit(1); }
     }
     
     if matches.opt_present("c") {
-        let cmd_str = match matches.opt_str("c") {
-                                                Some(cmd_str) => {cmd_str.to_owned()}, 
-                                                None => {~""}
-                                              };
-        return Some(cmd_str);
+        let cmd_str = match matches.opt_str("c") { Some(cmd_str) => {cmd_str.to_owned()}, 
+                                                   None => {~""}
+                                                 };
+        Some(cmd_str)
     } else {
-        return None;
+        None
     }
 }
 
 fn main() {
-    let opt_cmd_line = get_cmdline_from_args();
-    
-    match opt_cmd_line {
+    match get_cmdline_from_args() {
         Some(cmd_line) => Shell::new("").run_cmdline(cmd_line),
         None           => Shell::new("gash> ").run()
     }

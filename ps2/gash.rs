@@ -252,10 +252,9 @@ fn get_cmdline_from_args() -> Option<~str> {
     }
     
     if matches.opt_present("c") {
-        let cmd_str = match matches.opt_str("c") { Some(cmd_str) => {cmd_str.to_owned()}, 
-                                                   None => {~""}
-                                                 };
-        Some(cmd_str)
+        Some(match matches.opt_str("c") { Some(cmd_str) => {cmd_str.to_owned()}, 
+                                          None => {~""}
+                                        })
     } else {
         None
     }

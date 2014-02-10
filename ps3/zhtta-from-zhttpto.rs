@@ -25,18 +25,12 @@ static PORT:        int = 4414;
 static mut visitor_count: uint = 0;
 
 struct HTTP_Request {
-    priority: uint,
-    //stream: Option<std::io::net::tcp::TcpStream>,
-    peer_name: ~str, // as a key to TcpStream
+     // Use peer_name as the key to TcpStream. 
+     // Due to a bug in extra::arc in Rust 0.9, it is very inconvenient to use TcpStream without the "Freeze" bound.
+     // Issue: https://github.com/mozilla/rust/issues/12139 
+    peer_name: ~str,
     path: ~std::path::PosixPath
 }
-
-impl Ord for HTTP_Request {
-    fn lt(&self, other: &HTTP_Request) -> bool {
-        if self.priority > other.priority { true } else { false }
-    }
-}
-
 
 fn main() {
     let req_queue: ~[HTTP_Request] = ~[]; // Be used as FIFO queue.
@@ -57,7 +51,7 @@ fn main() {
             notify_port.recv();
             
             req_queue_get.access( |req_queue| {
-                match req_queue.shift_opt() {
+                match req_queue.shift_opt() { // Be used as FIFO queue.
                     None => { /* do nothing */ }
                     Some(req) => {
                         request_chan.send(req);
@@ -69,6 +63,7 @@ fn main() {
             //println(format!("serve file: {:?}", request.path));
             
             // Get stream from hashmap.
+            // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
             unsafe {
                 stream_map_get.unsafe_access(|local_stream_map| {
                     let stream = local_stream_map.pop(&request.peer_name).expect("no option tcpstream");
@@ -81,6 +76,7 @@ fn main() {
             let contents = File::open(request.path).read_to_end();
             stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             stream.write(contents);
+            // Close stream automatically.
         }
     }
 
@@ -154,8 +150,8 @@ fn main() {
                     // Save stream in hashmap for later response.
                     let (stream_port, stream_chan) = Chan::new();
                     stream_chan.send(stream);
-                    println("send to unsafe.");
                     unsafe {
+                        // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
                         stream_map_arc.unsafe_access(|local_stream_map| {
                             let stream = stream_port.recv();
                             local_stream_map.swap(peer_name.clone(), stream);
@@ -163,7 +159,7 @@ fn main() {
                     }
                     
                     // Enqueue the HTTP request.
-                    let req = HTTP_Request{priority: 1, peer_name: peer_name.clone(), path: path_obj.clone()};
+                    let req = HTTP_Request{peer_name: peer_name.clone(), path: path_obj.clone()};
                     
                     let (req_port, req_chan) = Chan::new();
                     req_chan.send(req);

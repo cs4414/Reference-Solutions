@@ -16,56 +16,73 @@ extern mod extra;
 use std::io::*;
 use std::io::net::ip::{SocketAddr};
 use std::{os, str};
-//use std::hashmap::HashMap;
+use std::hashmap::HashMap;
 
 use extra::arc::MutexArc;
-//use extra::priority_queue::PriorityQueue;
+use extra::priority_queue::PriorityQueue;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        int = 4414;
 static mut visitor_count: uint = 0;
 
 struct HTTP_Request {
-    //priority: uint,
-    stream: Option<std::io::net::tcp::TcpStream>,
-    //peer_name: std::io::net::ip::SocketAddr,
+    priority: uint,
+    //stream: Option<std::io::net::tcp::TcpStream>,
+    peer_name: ~str, // as a key to TcpStream
     path: ~std::path::PosixPath
 }
 
-
-/*
 impl Ord for HTTP_Request {
     fn lt(&self, other: &HTTP_Request) -> bool {
         if self.priority > other.priority { true } else { false }
     }
 }
-*/
+
 
 fn main() {
     let req_queue: ~[HTTP_Request] = ~[];
     let shared_req_queue = MutexArc::new(req_queue);
     
+    let mut stream_map: HashMap<~str, Option<std::io::net::tcp::TcpStream>> = HashMap::new();
+    let shared_stream_map = MutexArc::new(stream_map);
+    
+    
     let (notify_port, shared_notify_chan) = SharedChan::new();
     
     let req_queue_get = shared_req_queue.clone();
+    let stream_map_get = shared_stream_map.clone();
     do spawn {
+        let (request_port, request_chan) = Chan::new();
+        let (stream_port, stream_chan) = Chan::new();
         loop {
             notify_port.recv();
+            
+            req_queue_get.access( |req_queue| {
+                match req_queue.shift_opt() {
+                    None => { /* do nothing */ }
+                    Some(req) => {
+                        request_chan.send(req);
+                        
+                    }            
+                }
+            });
+            
+            let mut request = request_port.recv();
+            //println(format!("serve file: {:?}", request.path));
+            
+            // Get stream from hashmap.
             unsafe {
-                req_queue_get.unsafe_access( |req_queue| {
-                
-                    match req_queue.shift_opt() {
-                        None => { /* do nothing */ }
-                        Some(mut req) => {
-                                        println(format!("serve file: {:?}", req.path));
-                                        req.stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
-
-                                        let contents = File::open(req.path).read_to_end();
-                                        req.stream.write(contents);
-                                     }
-                    }
-                 });
+                stream_map_get.unsafe_access(|local_stream_map| {
+                    let mut stream = local_stream_map.pop(&request.peer_name).expect("no option tcpstream");
+                    stream_chan.send(stream);
+                });
             }
+            let mut stream = stream_port.recv();
+                        
+            // Response with file content.
+            let contents = File::open(request.path).read_to_end();
+            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+            stream.write(contents);
         }
     }
 
@@ -79,7 +96,7 @@ fn main() {
         queue_chan.send(shared_req_queue.clone());
         
         let notify_chan = shared_notify_chan.clone();
-        
+        let stream_map_arc = shared_stream_map.clone();
         // Spawn a task to handle the connection
         do spawn {
             unsafe {
@@ -91,15 +108,21 @@ fn main() {
           
             let mut stream = stream;
             
+            
+            let (pn_port, pn_chan) = Chan::new();
+            
             match stream {
                 Some(ref mut s) => {
                              match s.peer_name() {
-                                Some(pn) => {println(format!("Received connection from: [{:s}]", pn.to_str()));},
+                                Some(pn) => {pn_chan.send(pn.to_str()); println(format!("Received connection from: [{:s}]", pn.to_str()));},
                                 None => ()
                              }
                            },
                 None => ()
             }
+            
+            
+            let peer_name = pn_port.recv();
             
             let mut buf = [0, ..500];
             stream.read(buf);
@@ -132,31 +155,32 @@ fn main() {
                          <h2>Visitor count: {0:u}</h2>
                          </body></html>\r\n", unsafe{visitor_count});
                     stream.write(response.as_bytes());
-                } else if path_str.find_str("/../") != None || ext_name != "html" {
-                    println("403 forbidden");
-                    let response = format!("HTTP/1.1 403 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n 
-                                    <doctype !html><html><head><title>403 Forbidden</title>
-                                    <body>
-                                    <h1>403 Forbidden!</h1>
-                                    <p>You don't have permission to access the confidential files in CS4414.</p>
-                                    <hr>
-                                    <address>Zhttpto/0.3 (Ubuntu) Rust/0.9 Server at {:s} Port {:d}</address>
-                                    </body></html>\r\n", IP, PORT);
-                    stream.write(response.as_bytes());
                 } else {
                     // request scheduling
-                    
+                    println("request scheduling begins.");
                     //let local_req_queue = shared_req_queue.get();
-                    let req = HTTP_Request{stream: stream, path: path_obj.clone()};
+                    
+                    let req = HTTP_Request{priority: 1, peer_name: peer_name.clone(), path: path_obj.clone()};
                     let (req_port, req_chan) = Chan::new();
                     req_chan.send(req);
+                    
+                    let (stream_port, stream_chan) = Chan::new();
+                    stream_chan.send(stream);
+                    println("send to unsafe.");
                     unsafe {
-                        shared_req_queue.unsafe_access(|local_req_queue| {
-                            let req: HTTP_Request = req_port.recv();
-                            local_req_queue.push(req);
+                        stream_map_arc.unsafe_access(|local_stream_map| {
+                            let stream = stream_port.recv();
+                            local_stream_map.swap(peer_name.clone(), stream);
                         });
                     }
+                    
+                    shared_req_queue.access(|local_req_queue| {
+                        let req: HTTP_Request = req_port.recv();
+                        local_req_queue.push(req);
+                    });
+                        
                     notify_chan.send(());
+                    println("request queued.");
                 }
             }
             println!("connection terminates")

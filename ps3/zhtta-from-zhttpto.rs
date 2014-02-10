@@ -19,7 +19,6 @@ use std::{os, str};
 use std::hashmap::HashMap;
 
 use extra::arc::MutexArc;
-use extra::priority_queue::PriorityQueue;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        int = 4414;
@@ -40,13 +39,13 @@ impl Ord for HTTP_Request {
 
 
 fn main() {
-    let req_queue: ~[HTTP_Request] = ~[];
+    let req_queue: ~[HTTP_Request] = ~[]; // Be used as FIFO queue.
     let shared_req_queue = MutexArc::new(req_queue);
     
-    let mut stream_map: HashMap<~str, Option<std::io::net::tcp::TcpStream>> = HashMap::new();
+    let stream_map: HashMap<~str, Option<std::io::net::tcp::TcpStream>> = HashMap::new();
     let shared_stream_map = MutexArc::new(stream_map);
     
-    
+    // Create a task of request responder.
     let (notify_port, shared_notify_chan) = SharedChan::new();
     
     let req_queue_get = shared_req_queue.clone();
@@ -62,30 +61,30 @@ fn main() {
                     None => { /* do nothing */ }
                     Some(req) => {
                         request_chan.send(req);
-                        
                     }            
                 }
             });
             
-            let mut request = request_port.recv();
+            let request = request_port.recv();
             //println(format!("serve file: {:?}", request.path));
             
             // Get stream from hashmap.
             unsafe {
                 stream_map_get.unsafe_access(|local_stream_map| {
-                    let mut stream = local_stream_map.pop(&request.peer_name).expect("no option tcpstream");
+                    let stream = local_stream_map.pop(&request.peer_name).expect("no option tcpstream");
                     stream_chan.send(stream);
                 });
             }
             let mut stream = stream_port.recv();
                         
-            // Response with file content.
+            // Respond with file content.
             let contents = File::open(request.path).read_to_end();
             stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             stream.write(contents);
         }
     }
 
+    // Create socket.
     let addr = from_str::<SocketAddr>(format!("{:s}:{:d}", IP, PORT)).expect("Address error.");
     let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
     
@@ -104,10 +103,8 @@ fn main() {
             }
             
             let shared_req_queue = queue_port.recv();
-            //let local_req_queue = shared_req_queue.get();
           
             let mut stream = stream;
-            
             
             let (pn_port, pn_chan) = Chan::new();
             
@@ -137,11 +134,6 @@ fn main() {
                 let mut path_obj = ~os::getcwd();
                 path_obj.push(path_str.clone());
                 
-                let ext_name = match path_obj.extension_str() {
-                    Some(e) => e,
-                    None => "",
-                };
-                
                 if !path_obj.exists() || path_obj.is_dir() {
                     let response: ~str = 
                         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
@@ -158,12 +150,8 @@ fn main() {
                 } else {
                     // request scheduling
                     println("request scheduling begins.");
-                    //let local_req_queue = shared_req_queue.get();
                     
-                    let req = HTTP_Request{priority: 1, peer_name: peer_name.clone(), path: path_obj.clone()};
-                    let (req_port, req_chan) = Chan::new();
-                    req_chan.send(req);
-                    
+                    // Save stream in hashmap for later response.
                     let (stream_port, stream_chan) = Chan::new();
                     stream_chan.send(stream);
                     println("send to unsafe.");
@@ -174,13 +162,18 @@ fn main() {
                         });
                     }
                     
+                    // Enqueue the HTTP request.
+                    let req = HTTP_Request{priority: 1, peer_name: peer_name.clone(), path: path_obj.clone()};
+                    
+                    let (req_port, req_chan) = Chan::new();
+                    req_chan.send(req);
                     shared_req_queue.access(|local_req_queue| {
                         let req: HTTP_Request = req_port.recv();
                         local_req_queue.push(req);
                     });
                         
-                    notify_chan.send(());
-                    println("request queued.");
+                    notify_chan.send(()); // Send incoming notification to responder.
+                    println("request enqueued.");
                 }
             }
             println!("connection terminates")

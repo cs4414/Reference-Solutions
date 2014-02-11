@@ -19,6 +19,7 @@ use std::{os, str};
 use std::hashmap::HashMap;
 
 use extra::arc::MutexArc;
+use extra::priority_queue::PriorityQueue;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        int = 4414;
@@ -29,11 +30,19 @@ struct HTTP_Request {
      // Due to a bug in extra::arc in Rust 0.9, it is very inconvenient to use TcpStream without the "Freeze" bound.
      // Issue: https://github.com/mozilla/rust/issues/12139 
     peer_name: ~str,
-    path: ~std::path::PosixPath
+    path: ~std::path::PosixPath,
+    file_size: uint,
+    priority: uint,
+}
+
+impl Ord for HTTP_Request {
+    fn lt(&self, other: &HTTP_Request) -> bool {
+        if self.priority > other.priority { true } else { false }
+    }
 }
 
 fn main() {
-    let req_queue: ~[HTTP_Request] = ~[]; // Be used as FIFO queue.
+    let req_queue: PriorityQueue<HTTP_Request> = PriorityQueue::new(); // SRPT queue.
     let shared_req_queue = MutexArc::new(req_queue);
     
     let stream_map: HashMap<~str, Option<std::io::net::tcp::TcpStream>> = HashMap::new();
@@ -51,10 +60,11 @@ fn main() {
             notify_port.recv();
             
             req_queue_get.access( |req_queue| {
-                match req_queue.shift_opt() { // Be used as FIFO queue.
+                match req_queue.maybe_pop() { // SRPT queue.
                     None => { /* do nothing */ }
                     Some(req) => {
                         request_chan.send(req);
+                        debug!("A new request dequeued, now the length of queue is {:u}.", req_queue.len());
                     }            
                 }
             });
@@ -77,6 +87,7 @@ fn main() {
             stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             stream.write(contents);
             // Close stream automatically.
+            debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
         }
     }
 
@@ -107,7 +118,7 @@ fn main() {
             match stream {
                 Some(ref mut s) => {
                              match s.peer_name() {
-                                Some(pn) => {pn_chan.send(pn.to_str()); println(format!("Received connection from: [{:s}]", pn.to_str()));},
+                                Some(pn) => {pn_chan.send(pn.to_str()); debug!("=====Received connection from: [{:s}]=====", pn.to_str());},
                                 None => ()
                              }
                            },
@@ -120,12 +131,11 @@ fn main() {
             let mut buf = [0, ..500];
             stream.read(buf);
             let request_str = str::from_utf8(buf);
-            println(format!("Received request:\n{:s}", request_str));
+            debug!("Request :\n{:s}", request_str);
             
             let req_group : ~[&str]= request_str.splitn(' ', 3).collect();
             if req_group.len() > 2 {
                 let path_str = "." + req_group[1].to_owned();
-                println(format!("Request for path: \n{:?}", path_str));
                 
                 let mut path_obj = ~os::getcwd();
                 path_obj.push(path_str.clone());
@@ -145,7 +155,6 @@ fn main() {
                     stream.write(response.as_bytes());
                 } else {
                     // request scheduling
-                    println("request scheduling begins.");
                     
                     // Save stream in hashmap for later response.
                     let (stream_port, stream_chan) = Chan::new();
@@ -158,21 +167,27 @@ fn main() {
                         });
                     }
                     
+                    // Get file size.
+                    let file_size = std::io::fs::stat(path_obj).size as uint;
+                    
                     // Enqueue the HTTP request.
-                    let req = HTTP_Request{peer_name: peer_name.clone(), path: path_obj.clone()};
+                    let req = HTTP_Request{peer_name: peer_name.clone(), path: path_obj.clone(), file_size: file_size, priority: file_size};
                     
                     let (req_port, req_chan) = Chan::new();
                     req_chan.send(req);
+                    debug!("Waiting for queue mutex.");
                     shared_req_queue.access(|local_req_queue| {
+                        debug!("Got queue mutex lock.");
                         let req: HTTP_Request = req_port.recv();
                         local_req_queue.push(req);
+                        // To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="zhtta-from-zhttpto=debug" 
+                        debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
                     });
-                        
+                    
                     notify_chan.send(()); // Send incoming notification to responder.
-                    println("request enqueued.");
                 }
             }
-            println!("connection terminates")
+            //debug!("=====Terminated connection from [{:s}].=====", peer_name);
         }
     }
 }

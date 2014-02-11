@@ -10,6 +10,9 @@
 // University of Virginia - cs4414 Spring 2014
 // Weilin Xu and David Evans
 // Version 0.4
+
+// To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="zhtta=debug" 
+
 #[feature(globs)];
 extern mod extra;
 
@@ -46,10 +49,7 @@ struct WebServer {
     port: uint,
     working_directory: ~str,
     
-    //request_queue: PriorityQueue<HTTP_Request>,
     request_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>,
-    
-    //stream_map: HashMap<~str, Option<std::io::net::tcp::TcpStream>>,
     stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>,
     
     notify_port: Port<()>,
@@ -173,7 +173,6 @@ impl WebServer {
                                 debug!("Got queue mutex lock.");
                                 let req: HTTP_Request = req_port.recv();
                                 local_req_queue.push(req);
-                                // To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="zhtta-from-zhttpto=debug" 
                                 debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
                             });
                             
@@ -195,7 +194,7 @@ impl WebServer {
         let (request_port, request_chan) = Chan::new();
         let (stream_port, stream_chan) = Chan::new();
         loop {
-            self.notify_port.recv();
+            self.notify_port.recv(); // waiting for new request enqueued.
             
             req_queue_get.access( |req_queue| {
                 match req_queue.maybe_pop() { // SRPT queue.
@@ -219,8 +218,10 @@ impl WebServer {
                 });
             }
             let mut stream = stream_port.recv();
-                        
+            
+            // TODO: Spawn several tasks to respond the requests concurrently.
             // Respond with file content.
+            // TODO: read file content into chunks.
             let contents = File::open(request.path).read_to_end();
             stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             stream.write(contents);

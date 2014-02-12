@@ -45,7 +45,20 @@ impl Ord for HTTP_Request {
         if self.priority > other.priority { true } else { false }
     }
 }
+/*
+struct CacheItem {
+    file_path: ~str,
+    data: ~[u8],
+    file_size: uint,
+    status: bool, // false cases: updating
+    //last_modified_time: u64,
+}
 
+struct CacheManager {
+    hash_map_arc: RWArc<HashMap<~str, RWArc<CacheItem>>>,
+    
+}
+*/
 struct WebServer {
     ip: ~str,
     port: uint,
@@ -236,6 +249,37 @@ impl WebServer {
     
     // Respond the static file requests in queue.
     fn run(&mut self) {
+        // Implement application-layer caching inside this function
+        fn write_file_into_stream(path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
+            // TODO: implement file caching, which should be transparent to the user of the write_file_into_stream() function.
+            let mut stream = stream;
+            /* pseudo code for cacheing
+            
+            lookup cache
+            if hit {
+                write the bytes in cache to stream
+            } else {
+                start a background task to update the cache: create an invalid cached iteam with status marked as false, read bytes from file, write into cached item, status marked as true. 
+                read from file in chunks, and write to stream
+            }
+            
+            // step 1: all cached.
+            // step 2: smart replacing algorithm. (LRU?)
+            
+            
+            */
+            let mut file_reader = File::open(path).expect("invalid file!");
+            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+            
+            // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
+            let mut remaining_bytes = file_size;
+            while (remaining_bytes >= file_chunk_size) {
+                stream.write(file_reader.read_bytes(file_chunk_size));
+                remaining_bytes -= file_chunk_size;
+            }
+            stream.write(file_reader.read_bytes(remaining_bytes));
+        }
+        
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
@@ -276,21 +320,9 @@ impl WebServer {
             // Spawn several tasks to respond the requests concurrently.
             let child_concurrency_sem = concurrency_sem.clone();
             do spawn {
-                let mut stream = stream_port.recv();
+                let stream = stream_port.recv();
                 // Respond with file content.
-                // no caching
-                
-                let mut file_reader = File::open(request.path).expect("invalid file!");
-                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                
-                // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
-                let mut remaining_bytes = request.file_size;
-                while (remaining_bytes >= file_chunk_size) {
-                    stream.write(file_reader.read_bytes(file_chunk_size));
-                    remaining_bytes -= file_chunk_size;
-                }
-                stream.write(file_reader.read_bytes(remaining_bytes));
-                
+                write_file_into_stream(request.path, stream, request.file_size, file_chunk_size);
                 // Close stream automatically.
                 debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
                 child_concurrency_sem.release();

@@ -229,9 +229,7 @@ impl WebServer {
                 });
             }
             
-            
-            
-            // TODO: Spawn several tasks to respond the requests concurrently.
+            // Spawn several tasks to respond the requests concurrently.
             let child_concurrency_sem = concurrency_sem.clone();
             do spawn {
                 let mut stream = stream_port.recv();

@@ -160,7 +160,7 @@ impl WebServer {
                                  </body></html>\r\n", visitor_count_arc.read(|count| {*count}));
                             stream.write(response.as_bytes());
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
-                        } else if ext_str == "shtml" { // TODO: Potentially embedding gash.
+                        } else if ext_str == "shtml" { // Dynamic web pages.
                             let contents = File::open(path_obj).read_to_str();
                             stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
                             // TODO: improve the parsing code.
@@ -196,7 +196,6 @@ impl WebServer {
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                             
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
-                            
                             // request scheduling
                             
                             // Save stream in hashmap for later response.
@@ -256,7 +255,7 @@ impl WebServer {
                     Some(req) => {
                         request_chan.send(req);
                         debug!("A new request dequeued, now the length of queue is {:u}.", req_queue.len());
-                    }            
+                    }
                 }
             });
             

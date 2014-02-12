@@ -340,20 +340,17 @@ impl WebServer {
         // TODO: step 2: smart replacing algorithm. (LRU?)
         
         */
-        
-        
-        let (cache_item_status_port, cache_item_status_chan) = Chan::new();
+
+        let mut cache_item_status = -1;
         unsafe {
-            let cache_item_status = cache_arc.unsafe_access(|cache| {
+            cache_item_status = cache_arc.unsafe_access(|cache| {
                 let cache_item_arc_opt = cache.find(&path_str.to_owned());
                 match cache_item_arc_opt {
                     Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
                     None => -1
                 }
             });
-            cache_item_status_chan.send(cache_item_status);
         }
-        let cache_item_status = cache_item_status_port.recv();
         
         if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
             let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
@@ -375,8 +372,7 @@ impl WebServer {
                     // insert a cached item with status UPDATING, so that other tasks will just ignore it.
                     // then update the cached item, and set the status as OK.
                     
-                    let (to_be_updated_port, to_be_updated_chan) = Chan::new();
-                    
+                    let mut to_be_updated = false;
                     unsafe {
                         cache_arc.unsafe_access(|cache| {
                             if cache.find(&path_str.to_owned()).is_none() {
@@ -387,14 +383,12 @@ impl WebServer {
                                     status: 1, //0: OK, 1: UPDATING
                                 };
                                 cache.insert(path_str.to_owned(), RWArc::new(inited_cache_item));
-                                to_be_updated_chan.send(true);
+                                to_be_updated = true;
                             } else { // just exit, since other task is updating it.
-                                to_be_updated_chan.send(false);
+                                to_be_updated = false;
                             }
                         });
                     }
-                    
-                    let to_be_updated = to_be_updated_port.recv();
                     
                     if to_be_updated == true {
                         // read the file bytes into memory, then copy it to cache item.
@@ -404,15 +398,13 @@ impl WebServer {
                         
                         let (file_data_port, file_data_chan) = Chan::new();
                         file_data_chan.send(file_data);
-                        unsafe {
-                            cache_arc.unsafe_access(|cache| {
-                                let cache_item_arc = cache.find(&path_str.to_owned()).expect("no such cache item");
-                                cache_item_arc.write(|cache_item| {
-                                    cache_item.data = file_data_port.recv();
-                                    cache_item.status = 0;
-                                });
-                            });
-                        }
+                        
+                        let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
+                        
+                        cache_item_arc.write(|cache_item| {
+                            cache_item.data = file_data_port.recv();
+                            cache_item.status = 0;
+                        });
                     }
                 } // do spawn for updating catch on the background.
             } // if cache_item_status == -1 { // Not exist.
@@ -430,7 +422,6 @@ impl WebServer {
             stream.write(file_reader.read_bytes(remaining_bytes));
         } // if status != 0
     } //fn
-
 }
 
 fn main() {

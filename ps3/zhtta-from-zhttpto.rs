@@ -286,8 +286,8 @@ impl WebServer {
                 read from file in chunks, and write to stream
             }
             
-            // step 1: all cached.
-            // step 2: smart replacing algorithm. (LRU?)
+            // Done: step 1: all cached. 
+            // TODO: step 2: smart replacing algorithm. (LRU?)
             
             */
             
@@ -312,32 +312,39 @@ impl WebServer {
                     stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
                     stream.write(cache_item.data);
                 });
+                debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
                 
             } else {
                 if cache_item_status == -1 { // Not exist.
-                /*
+                
                     // start a background task to update the cache
                     let cache_arc = cache_arc.clone();
+                    let path = ~path.clone();
+                    let path_str = path_str.to_owned();
                     do spawn {
                         // insert a cached item with status UPDATING, so that other tasks will just ignore it.
                         // then update the cached item, and set the status as OK.
                         
-                        // TODO: use unsafe_access of MutexArc
-                        let to_be_updated = cache_arc.write(|cache| {
-                            // check the cache item first, in case the other concurrent task has created item for it.
-                            if cache.find(&path_str.to_owned()).is_none() {
-                                let inited_cache_item = CacheItem {
-                                    file_path: path_str.to_owned(),
-                                    data: ~[],
-                                    file_size: file_size,
-                                    status: 1, //0: OK, 1: UPDATING
-                                };
-                                cache.insert(path_str.to_owned(), RWArc::new(inited_cache_item));
-                                true
-                            } else { // just exit, since other task is updating it.
-                                false
-                            }
-                        });
+                        let (to_be_updated_port, to_be_updated_chan) = Chan::new();
+                        
+                        unsafe {
+                            cache_arc.unsafe_access(|cache| {
+                                if cache.find(&path_str.to_owned()).is_none() {
+                                    let inited_cache_item = CacheItem {
+                                        file_path: path_str.to_owned(),
+                                        data: ~[],
+                                        file_size: file_size,
+                                        status: 1, //0: OK, 1: UPDATING
+                                    };
+                                    cache.insert(path_str.to_owned(), RWArc::new(inited_cache_item));
+                                    to_be_updated_chan.send(true);
+                                } else { // just exit, since other task is updating it.
+                                    to_be_updated_chan.send(false);
+                                }
+                            });
+                        }
+                        
+                        let to_be_updated = to_be_updated_port.recv();
                         
                         if to_be_updated == true {
                             // read the file bytes into memory, then copy it to cache item.
@@ -345,16 +352,19 @@ impl WebServer {
                             let mut file_reader = File::open(path).expect("invalid file!");
                             let file_data = file_reader.read_to_end();
                             
-                            cache_arc.write(|cache| {
-                                let cache_item_arc = cache.find(&path_str.to_owned()).expect("no such cache item");
-                                cache_item_arc.write(|cache_item| {
-                                    cache_item.data = file_data;
-                                    cache_item.status = 0;
+                            let (file_data_port, file_data_chan) = Chan::new();
+                            file_data_chan.send(file_data);
+                            unsafe {
+                                cache_arc.unsafe_access(|cache| {
+                                    let cache_item_arc = cache.find(&path_str.to_owned()).expect("no such cache item");
+                                    cache_item_arc.write(|cache_item| {
+                                        cache_item.data = file_data_port.recv();
+                                        cache_item.status = 0;
+                                    });
                                 });
-                            });
+                            }
                         }
                     } // do spawn for updating catch on the background.
-                    */
                 } // if cache_item_status == -1 { // Not exist.
                 // not exist, or updating, just read from file.
                 // read from file in chunks, and write to stream

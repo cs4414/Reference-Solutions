@@ -50,6 +50,7 @@ struct WebServer {
     port: uint,
     working_directory: ~str,
     max_concurrency: uint,
+    file_chunk_size: uint,
     
     concurrency_sem: Semaphore,
     request_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>,
@@ -60,7 +61,7 @@ struct WebServer {
 }
 
 impl WebServer {
-    fn new(ip: &str, port: uint, working_directory: &str, max_concurrency: uint) -> WebServer {
+    fn new(ip: &str, port: uint, working_directory: &str, max_concurrency: uint, file_chunk_size: uint) -> WebServer {
         // change directory to working_directory
         // chroot jain in working_directory
         let (notify_port, shared_notify_chan) = SharedChan::new();
@@ -69,6 +70,7 @@ impl WebServer {
             port: port,
             working_directory: working_directory.to_owned(),
             max_concurrency: max_concurrency,
+            file_chunk_size: file_chunk_size,
             
             concurrency_sem: Semaphore::new(max_concurrency as int),
             
@@ -195,8 +197,8 @@ impl WebServer {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
-        let max_concurrency = self.max_concurrency;
         let concurrency_sem = self.concurrency_sem.clone();
+        let file_chunk_size = self.file_chunk_size;
         // I couldn't send port into another task. So I have to make it as the main task that can access self.notify_port.
         //let notify_port = self.notify_port;
         
@@ -235,9 +237,21 @@ impl WebServer {
                 let mut stream = stream_port.recv();
                 // Respond with file content.
                 // TODO: read file content into chunks.
-                let contents = File::open(request.path).read_to_end();
+                
+                // no caching
+                
+                //let mut buf = [0, .. file_chunk_size];
+                let mut file_reader = File::open(request.path).expect("invalid file!");
                 stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                stream.write(contents);
+                
+                // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
+                let mut remaining_bytes = request.file_size;
+                while (remaining_bytes >= file_chunk_size) {
+                    stream.write(file_reader.read_bytes(file_chunk_size));
+                    remaining_bytes -= file_chunk_size;
+                }
+                stream.write(file_reader.read_bytes(remaining_bytes));
+                
                 // Close stream automatically.
                 debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
                 child_concurrency_sem.release();
@@ -247,7 +261,7 @@ impl WebServer {
 }
 
 fn main() {
-    let mut zhtta = WebServer::new(IP, PORT, "./", 1);
+    let mut zhtta = WebServer::new(IP, PORT, "./", 5, 50000);
     zhtta.listen();
     zhtta.run();
 

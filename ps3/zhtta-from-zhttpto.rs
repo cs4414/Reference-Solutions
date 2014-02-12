@@ -25,6 +25,8 @@ use extra::arc::{RWArc, MutexArc};
 use extra::priority_queue::PriorityQueue;
 use extra::sync::Semaphore;
 
+//mod gash;
+
 static IP: &'static str = "127.0.0.1";
 static PORT:        uint = 4414;
 
@@ -141,6 +143,11 @@ impl WebServer {
                         let mut path_obj = ~os::getcwd();
                         path_obj.push(path_str.clone());
                         
+                        let ext_str = match path_obj.extension_str() {
+                            Some(e) => e,
+                            None => "",
+                        };
+                        
                         if !path_obj.exists() || path_obj.is_dir() {
                             let response: ~str = 
                                 format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
@@ -154,7 +161,14 @@ impl WebServer {
                                  <h2>Visitor count: {0:u}</h2>
                                  </body></html>\r\n", visitor_count_arc.read(|count| {*count}));
                             stream.write(response.as_bytes());
-                        } else {
+                        } else if ext_str == "shtml" { // TODO: Potentially embedding gash.
+                            let contents = File::open(path_obj).read_to_end();
+                            //gash::Shell::new("").run_cmdline(cmd_line)
+                            stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
+                            stream.write(contents);
+                            
+                        } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
+                            
                             // request scheduling
                             
                             // Save stream in hashmap for later response.
@@ -193,6 +207,7 @@ impl WebServer {
         }
     }
     
+    // Respond the static file requests in queue.
     fn run(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();

@@ -253,144 +253,16 @@ impl WebServer {
         }
     }
     
+        
     // Respond the static file requests in queue.
     fn run(&mut self) {
-        // Implement application-layer caching inside this function
-        
-        fn get_cache_item_arc(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path_str: &str) -> RWArc<CacheItem> {
-            let (cache_item_arc_port, cache_item_arc_chan) = Chan::new();
-            unsafe {
-                cache_arc.unsafe_access(|cache| {
-                    let cache_item_arc_opt = cache.find(&path_str.to_owned());
-                    match cache_item_arc_opt {
-                        Some(cache_item_arc) => {cache_item_arc_chan.send(cache_item_arc.clone());},
-                        None => {println("error...");}
-                    }
-                });
-            }
-            cache_item_arc_port.recv()
-        }
-        
-        // Here's a transparent function for user, with caching mechanism inside.
-        fn write_file_into_stream(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
-            // TODO: implement file caching, which should be transparent to the user of the write_file_into_stream() function.
-            let mut stream = stream;
-            let path_str = path.as_str().expect("invalid path");
-            
-            /* pseudo code for cacheing
-            
-            lookup cache
-            if hit {
-                write the bytes in cache to stream
-            } else {
-                start a background task to update the cache: create an invalid cached iteam with status marked as false, read bytes from file, write into cached item, status marked as true. 
-                read from file in chunks, and write to stream
-            }
-            
-            // Done: step 1: all cached. 
-            // TODO: step 2: smart replacing algorithm. (LRU?)
-            
-            */
-            
-            
-            let (cache_item_status_port, cache_item_status_chan) = Chan::new();
-            unsafe {
-                let cache_item_status = cache_arc.unsafe_access(|cache| {
-                    let cache_item_arc_opt = cache.find(&path_str.to_owned());
-                    match cache_item_arc_opt {
-                        Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
-                        None => -1
-                    }
-                });
-                cache_item_status_chan.send(cache_item_status);
-            }
-            let cache_item_status = cache_item_status_port.recv();
-            
-            if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
-                let cache_item_arc = get_cache_item_arc(cache_arc, path_str);
-                
-                cache_item_arc.read(|cache_item| {
-                    stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                    stream.write(cache_item.data);
-                });
-                debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
-                
-            } else {
-                if cache_item_status == -1 { // Not exist.
-                
-                    // start a background task to update the cache
-                    let cache_arc = cache_arc.clone();
-                    let path = ~path.clone();
-                    let path_str = path_str.to_owned();
-                    do spawn {
-                        // insert a cached item with status UPDATING, so that other tasks will just ignore it.
-                        // then update the cached item, and set the status as OK.
-                        
-                        let (to_be_updated_port, to_be_updated_chan) = Chan::new();
-                        
-                        unsafe {
-                            cache_arc.unsafe_access(|cache| {
-                                if cache.find(&path_str.to_owned()).is_none() {
-                                    let inited_cache_item = CacheItem {
-                                        file_path: path_str.to_owned(),
-                                        data: ~[],
-                                        file_size: file_size,
-                                        status: 1, //0: OK, 1: UPDATING
-                                    };
-                                    cache.insert(path_str.to_owned(), RWArc::new(inited_cache_item));
-                                    to_be_updated_chan.send(true);
-                                } else { // just exit, since other task is updating it.
-                                    to_be_updated_chan.send(false);
-                                }
-                            });
-                        }
-                        
-                        let to_be_updated = to_be_updated_port.recv();
-                        
-                        if to_be_updated == true {
-                            // read the file bytes into memory, then copy it to cache item.
-                            // read the data out of the cache_arc, so that other tasks can understand the status, not just waiting.
-                            let mut file_reader = File::open(path).expect("invalid file!");
-                            let file_data = file_reader.read_to_end();
-                            
-                            let (file_data_port, file_data_chan) = Chan::new();
-                            file_data_chan.send(file_data);
-                            unsafe {
-                                cache_arc.unsafe_access(|cache| {
-                                    let cache_item_arc = cache.find(&path_str.to_owned()).expect("no such cache item");
-                                    cache_item_arc.write(|cache_item| {
-                                        cache_item.data = file_data_port.recv();
-                                        cache_item.status = 0;
-                                    });
-                                });
-                            }
-                        }
-                    } // do spawn for updating catch on the background.
-                } // if cache_item_status == -1 { // Not exist.
-                // not exist, or updating, just read from file.
-                // read from file in chunks, and write to stream
-                let mut file_reader = File::open(path).expect("invalid file!");
-                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                
-                // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
-                let mut remaining_bytes = file_size;
-                while (remaining_bytes >= file_chunk_size) {
-                    stream.write(file_reader.read_bytes(file_chunk_size));
-                    remaining_bytes -= file_chunk_size;
-                }
-                stream.write(file_reader.read_bytes(remaining_bytes));
-            } // if status != 0
-        } //fn
-        
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
         let concurrency_sem = self.concurrency_sem.clone();
         let file_chunk_size = self.file_chunk_size;
         
-        
-        // I couldn't send port into another task. So I have to make it as the main task that can access self.notify_port.
-        //let notify_port = self.notify_port;
+        // Port<> could not be sent to another task. So I have to make it as the main task that can access self.notify_port.
         
         let (request_port, request_chan) = Chan::new();
         loop {
@@ -427,13 +299,138 @@ impl WebServer {
             do spawn {
                 let stream = stream_port.recv();
                 // Respond with file content.
-                write_file_into_stream(cache_arc, request.path, stream, request.file_size, file_chunk_size);
+                WebServer::write_file_into_stream(cache_arc, request.path, stream, request.file_size, file_chunk_size);
                 // Close stream automatically.
                 debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
                 child_concurrency_sem.release();
             }
         }
     }
+    
+    fn get_cache_item_arc(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path_str: &str) -> RWArc<CacheItem> {
+        let (cache_item_arc_port, cache_item_arc_chan) = Chan::new();
+        unsafe {
+            cache_arc.unsafe_access(|cache| {
+                let cache_item_arc_opt = cache.find(&path_str.to_owned());
+                match cache_item_arc_opt {
+                    Some(cache_item_arc) => {cache_item_arc_chan.send(cache_item_arc.clone());},
+                    None => {println("error...");}
+                }
+            });
+        }
+        cache_item_arc_port.recv()
+    }
+    
+    fn write_file_into_stream(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
+        // TODO: implement file caching, which should be transparent to the user of the write_file_into_stream() function.
+        let mut stream = stream;
+        let path_str = path.as_str().expect("invalid path");
+        
+        /* pseudo code for cacheing
+        
+        lookup cache
+        if hit {
+            write the bytes in cache to stream
+        } else {
+            start a background task to update the cache: create an invalid cached iteam with status marked as false, read bytes from file, write into cached item, status marked as true. 
+            read from file in chunks, and write to stream
+        }
+        
+        // Done: step 1: all cached. 
+        // TODO: step 2: smart replacing algorithm. (LRU?)
+        
+        */
+        
+        
+        let (cache_item_status_port, cache_item_status_chan) = Chan::new();
+        unsafe {
+            let cache_item_status = cache_arc.unsafe_access(|cache| {
+                let cache_item_arc_opt = cache.find(&path_str.to_owned());
+                match cache_item_arc_opt {
+                    Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
+                    None => -1
+                }
+            });
+            cache_item_status_chan.send(cache_item_status);
+        }
+        let cache_item_status = cache_item_status_port.recv();
+        
+        if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
+            let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
+            
+            cache_item_arc.read(|cache_item| {
+                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                stream.write(cache_item.data);
+            });
+            debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
+            
+        } else {
+            if cache_item_status == -1 { // Not exist.
+            
+                // start a background task to update the cache
+                let cache_arc = cache_arc.clone();
+                let path = ~path.clone();
+                let path_str = path_str.to_owned();
+                do spawn {
+                    // insert a cached item with status UPDATING, so that other tasks will just ignore it.
+                    // then update the cached item, and set the status as OK.
+                    
+                    let (to_be_updated_port, to_be_updated_chan) = Chan::new();
+                    
+                    unsafe {
+                        cache_arc.unsafe_access(|cache| {
+                            if cache.find(&path_str.to_owned()).is_none() {
+                                let inited_cache_item = CacheItem {
+                                    file_path: path_str.to_owned(),
+                                    data: ~[],
+                                    file_size: file_size,
+                                    status: 1, //0: OK, 1: UPDATING
+                                };
+                                cache.insert(path_str.to_owned(), RWArc::new(inited_cache_item));
+                                to_be_updated_chan.send(true);
+                            } else { // just exit, since other task is updating it.
+                                to_be_updated_chan.send(false);
+                            }
+                        });
+                    }
+                    
+                    let to_be_updated = to_be_updated_port.recv();
+                    
+                    if to_be_updated == true {
+                        // read the file bytes into memory, then copy it to cache item.
+                        // read the data out of the cache_arc, so that other tasks can understand the status, not just waiting.
+                        let mut file_reader = File::open(path).expect("invalid file!");
+                        let file_data = file_reader.read_to_end();
+                        
+                        let (file_data_port, file_data_chan) = Chan::new();
+                        file_data_chan.send(file_data);
+                        unsafe {
+                            cache_arc.unsafe_access(|cache| {
+                                let cache_item_arc = cache.find(&path_str.to_owned()).expect("no such cache item");
+                                cache_item_arc.write(|cache_item| {
+                                    cache_item.data = file_data_port.recv();
+                                    cache_item.status = 0;
+                                });
+                            });
+                        }
+                    }
+                } // do spawn for updating catch on the background.
+            } // if cache_item_status == -1 { // Not exist.
+            // not exist, or updating, just read from file.
+            // read from file in chunks, and write to stream
+            let mut file_reader = File::open(path).expect("invalid file!");
+            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+            
+            // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
+            let mut remaining_bytes = file_size;
+            while (remaining_bytes >= file_chunk_size) {
+                stream.write(file_reader.read_bytes(file_chunk_size));
+                remaining_bytes -= file_chunk_size;
+            }
+            stream.write(file_reader.read_bytes(remaining_bytes));
+        } // if status != 0
+    } //fn
+
 }
 
 fn main() {

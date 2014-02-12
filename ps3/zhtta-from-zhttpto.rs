@@ -50,7 +50,7 @@ struct CacheItem {
     file_path: ~str,
     data: ~[u8],
     file_size: uint,
-    status: int, // 0: available, 1: inited, 2: updating
+    status: int, // 0: available, 1: updating, -1: not exist.
     //last_modified_time: u64,
 }
 /*
@@ -271,6 +271,7 @@ impl WebServer {
             cache_item_arc_port.recv()
         }
         
+        // Here's a transparent function for user, with caching mechanism inside.
         fn write_file_into_stream(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
             // TODO: implement file caching, which should be transparent to the user of the write_file_into_stream() function.
             let mut stream = stream;

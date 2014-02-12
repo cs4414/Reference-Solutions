@@ -25,7 +25,7 @@ use extra::arc::{RWArc, MutexArc};
 use extra::priority_queue::PriorityQueue;
 use extra::sync::Semaphore;
 
-//mod gash;
+mod gash;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        uint = 4414;
@@ -64,8 +64,9 @@ struct WebServer {
 
 impl WebServer {
     fn new(ip: &str, port: uint, working_directory: &str, max_concurrency: uint, file_chunk_size: uint) -> WebServer {
+        // TODO: chroot jail
         // change directory to working_directory
-        // chroot jain in working_directory
+        // chroot jail in working_directory
         let (notify_port, shared_notify_chan) = SharedChan::new();
         WebServer {
             ip: ip.to_owned(),
@@ -77,10 +78,7 @@ impl WebServer {
             visitor_count_arc: RWArc::new(0 as uint),
             concurrency_sem: Semaphore::new(max_concurrency as int),
             
-            //request_queue: PriorityQueue::new(),
             request_queue_arc: MutexArc::new(PriorityQueue::new()),
-            
-            //stream_map: HashMap::new(),
             stream_map_arc: MutexArc::new(HashMap::new()),
             
             notify_port: notify_port,
@@ -161,11 +159,41 @@ impl WebServer {
                                  <h2>Visitor count: {0:u}</h2>
                                  </body></html>\r\n", visitor_count_arc.read(|count| {*count}));
                             stream.write(response.as_bytes());
+                            debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else if ext_str == "shtml" { // TODO: Potentially embedding gash.
-                            let contents = File::open(path_obj).read_to_end();
-                            //gash::Shell::new("").run_cmdline(cmd_line)
+                            let contents = File::open(path_obj).read_to_str();
                             stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
-                            stream.write(contents);
+                            // TODO: improve the parsing code.
+                            for line in contents.lines() {
+                                if line.contains("<!--#exec cmd=\"") {
+                                    let start = line.find_str("<!--#exec cmd=\"").unwrap();
+                                    let start_cmd = start + 15;
+                                    let mut end_cmd = -1;
+                                    let mut end = -1;
+                                    for i in range(start_cmd+1, line.len()) {
+                                        if line.char_at(i) == '"' {
+                                            end_cmd = i;
+                                        } else if line.char_at(i) == '>' {
+                                            end = i + 1;
+                                        }
+                                        if end_cmd != -1 && end != -1 {
+                                            break;
+                                        }
+                                    }
+                                    if end_cmd == -1 || end == -1 || end_cmd >= end {
+                                        stream.write(line.as_bytes());
+                                    } else {
+                                        stream.write(line.slice_to(start).as_bytes());
+                                        let cmd = line.slice(start_cmd, end_cmd);
+                                        let ret_str = gash::run_cmdline(cmd);
+                                        stream.write(ret_str.as_bytes());
+                                        stream.write(line.slice_from(end).as_bytes());
+                                    }
+                                } else {
+                                    stream.write(line.as_bytes());
+                                }
+                            }
+                            debug!("=====Terminated connection from [{:s}].=====", peer_name);
                             
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
                             

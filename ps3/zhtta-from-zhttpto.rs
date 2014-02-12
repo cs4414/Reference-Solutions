@@ -105,6 +105,60 @@ impl WebServer {
         }
     }
     
+    fn response_with_default_page(stream: Option<std::io::net::tcp::TcpStream>, visitor_count_arc: RWArc<uint>) {
+        //let visitor_count_arc = self.visitor_count_arc.clone();
+        let mut stream = stream;
+        let response: ~str = 
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
+             <doctype !html><html><head><title>Hello, Rust!</title>
+             <style>body \\{ background-color: \\#111; color: \\#FFEEAA \\}
+                    h1 \\{ font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red\\}
+                    h2 \\{ font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green\\}
+             </style></head>
+             <body>
+             <h1>Greetings, Krusty!</h1>
+             <h2>Visitor count: {0:u}</h2>
+             </body></html>\r\n", visitor_count_arc.read(|count| {*count}));
+        stream.write(response.as_bytes());
+    }
+    
+    fn response_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path) {
+        let mut stream = stream;
+        let contents = File::open(path_obj).read_to_str();
+        stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
+        // TODO: improve the parsing code.
+        for line in contents.lines() {
+            if line.contains("<!--#exec cmd=\"") {
+                let start = line.find_str("<!--#exec cmd=\"").unwrap();
+                let start_cmd = start + 15;
+                let mut end_cmd = -1;
+                let mut end = -1;
+                for i in range(start_cmd+1, line.len()) {
+                    if line.char_at(i) == '"' {
+                        end_cmd = i;
+                    } else if line.char_at(i) == '>' {
+                        end = i + 1;
+                    }
+                    if end_cmd != -1 && end != -1 {
+                        break;
+                    }
+                }
+                if end_cmd == -1 || end == -1 || end_cmd >= end {
+                    stream.write(line.as_bytes());
+                } else {
+                    stream.write(line.slice_to(start).as_bytes());
+                    let cmd = line.slice(start_cmd, end_cmd);
+                    let ret_str = gash::run_cmdline(cmd);
+                    stream.write(ret_str.as_bytes());
+                    stream.write(line.slice_from(end).as_bytes());
+                }
+            } else {
+                stream.write(line.as_bytes());
+            }
+        }
+    }
+    
+    
     fn listen(&mut self) {
         // Create socket.
         let addr = from_str::<SocketAddr>(format!("{:s}:{:u}", self.ip, self.port)).expect("Address error.");
@@ -166,54 +220,11 @@ impl WebServer {
                         };
                         
                         if !path_obj.exists() || path_obj.is_dir() {
-                            let response: ~str = 
-                                format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
-                                 <doctype !html><html><head><title>Hello, Rust!</title>
-                                 <style>body \\{ background-color: \\#111; color: \\#FFEEAA \\}
-                                        h1 \\{ font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red\\}
-                                        h2 \\{ font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green\\}
-                                 </style></head>
-                                 <body>
-                                 <h1>Greetings, Krusty!</h1>
-                                 <h2>Visitor count: {0:u}</h2>
-                                 </body></html>\r\n", visitor_count_arc.read(|count| {*count}));
-                            stream.write(response.as_bytes());
+                            WebServer::response_with_default_page(stream, visitor_count_arc);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else if ext_str == "shtml" { // Dynamic web pages.
-                            let contents = File::open(path_obj).read_to_str();
-                            stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
-                            // TODO: improve the parsing code.
-                            for line in contents.lines() {
-                                if line.contains("<!--#exec cmd=\"") {
-                                    let start = line.find_str("<!--#exec cmd=\"").unwrap();
-                                    let start_cmd = start + 15;
-                                    let mut end_cmd = -1;
-                                    let mut end = -1;
-                                    for i in range(start_cmd+1, line.len()) {
-                                        if line.char_at(i) == '"' {
-                                            end_cmd = i;
-                                        } else if line.char_at(i) == '>' {
-                                            end = i + 1;
-                                        }
-                                        if end_cmd != -1 && end != -1 {
-                                            break;
-                                        }
-                                    }
-                                    if end_cmd == -1 || end == -1 || end_cmd >= end {
-                                        stream.write(line.as_bytes());
-                                    } else {
-                                        stream.write(line.slice_to(start).as_bytes());
-                                        let cmd = line.slice(start_cmd, end_cmd);
-                                        let ret_str = gash::run_cmdline(cmd);
-                                        stream.write(ret_str.as_bytes());
-                                        stream.write(line.slice_from(end).as_bytes());
-                                    }
-                                } else {
-                                    stream.write(line.as_bytes());
-                                }
-                            }
+                            WebServer::response_with_dynamic_page(stream, path_obj);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
-                            
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
                             // request scheduling
                             
@@ -366,10 +377,7 @@ impl WebServer {
         } // do spawn for updating catch on the background.
     }
     
-
-    
     fn write_file_into_stream(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
-        // TODO: implement file caching, which should be transparent to the user of the write_file_into_stream() function.
         let mut stream = stream;
         let path_str = path.as_str().expect("invalid path");
         
@@ -410,7 +418,7 @@ impl WebServer {
             
         } else {
             if cache_item_status == -1 { // Not exist.
-                // start a background task to update the cache
+                // start a background task to update the cache.
                 WebServer::insert_cache_item(cache_arc.clone(), ~path.clone(), file_size);
             }
             // It doesn't hit in cahe, just read from file.
@@ -424,7 +432,7 @@ impl WebServer {
                 remaining_bytes -= file_chunk_size;
             }
             stream.write(file_reader.read_bytes(remaining_bytes));
-        } // if status != 0
+        }
     }
 }
 

@@ -45,15 +45,15 @@ impl Ord for HTTP_Request {
         if self.priority > other.priority { true } else { false }
     }
 }
-/*
+
 struct CacheItem {
     file_path: ~str,
     data: ~[u8],
     file_size: uint,
-    status: bool, // false cases: updating
+    status: int, // 0: available, 1: inited, 2: updating
     //last_modified_time: u64,
 }
-
+/*
 struct CacheManager {
     hash_map_arc: RWArc<HashMap<~str, RWArc<CacheItem>>>,
     
@@ -73,6 +73,10 @@ struct WebServer {
     
     notify_port: Port<()>,
     shared_notify_chan: SharedChan<()>,
+    
+    // `std::hashmap::HashMap<~str,extra::arc::RWArc<CacheItem>>` does not fulfill `Freeze`
+    // So I have to use the unsafe method in MutexArc instead.
+    cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>,
 }
 
 impl WebServer {
@@ -96,6 +100,8 @@ impl WebServer {
             
             notify_port: notify_port,
             shared_notify_chan: shared_notify_chan,
+            
+            cache_arc: MutexArc::new(HashMap::new()),
         }
     }
     
@@ -250,9 +256,26 @@ impl WebServer {
     // Respond the static file requests in queue.
     fn run(&mut self) {
         // Implement application-layer caching inside this function
-        fn write_file_into_stream(path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
+        
+        fn get_cache_item_arc(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path_str: &str) -> RWArc<CacheItem> {
+            let (cache_item_arc_port, cache_item_arc_chan) = Chan::new();
+            unsafe {
+                cache_arc.unsafe_access(|cache| {
+                    let cache_item_arc_opt = cache.find(&path_str.to_owned());
+                    match cache_item_arc_opt {
+                        Some(cache_item_arc) => {cache_item_arc_chan.send(cache_item_arc.clone());},
+                        None => {println("error...");}
+                    }
+                });
+            }
+            cache_item_arc_port.recv()
+        }
+        
+        fn write_file_into_stream(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
             // TODO: implement file caching, which should be transparent to the user of the write_file_into_stream() function.
             let mut stream = stream;
+            let path_str = path.as_str().expect("invalid path");
+            
             /* pseudo code for cacheing
             
             lookup cache
@@ -266,25 +289,95 @@ impl WebServer {
             // step 1: all cached.
             // step 2: smart replacing algorithm. (LRU?)
             
-            
             */
-            let mut file_reader = File::open(path).expect("invalid file!");
-            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             
-            // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
-            let mut remaining_bytes = file_size;
-            while (remaining_bytes >= file_chunk_size) {
-                stream.write(file_reader.read_bytes(file_chunk_size));
-                remaining_bytes -= file_chunk_size;
+            
+            let (cache_item_status_port, cache_item_status_chan) = Chan::new();
+            unsafe {
+                let cache_item_status = cache_arc.unsafe_access(|cache| {
+                    let cache_item_arc_opt = cache.find(&path_str.to_owned());
+                    match cache_item_arc_opt {
+                        Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
+                        None => -1
+                    }
+                });
+                cache_item_status_chan.send(cache_item_status);
             }
-            stream.write(file_reader.read_bytes(remaining_bytes));
-        }
+            let cache_item_status = cache_item_status_port.recv();
+            
+            if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
+                let cache_item_arc = get_cache_item_arc(cache_arc, path_str);
+                
+                cache_item_arc.read(|cache_item| {
+                    stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                    stream.write(cache_item.data);
+                });
+                
+            } else {
+                if cache_item_status == -1 { // Not exist.
+                /*
+                    // start a background task to update the cache
+                    let cache_arc = cache_arc.clone();
+                    do spawn {
+                        // insert a cached item with status UPDATING, so that other tasks will just ignore it.
+                        // then update the cached item, and set the status as OK.
+                        
+                        // TODO: use unsafe_access of MutexArc
+                        let to_be_updated = cache_arc.write(|cache| {
+                            // check the cache item first, in case the other concurrent task has created item for it.
+                            if cache.find(&path_str.to_owned()).is_none() {
+                                let inited_cache_item = CacheItem {
+                                    file_path: path_str.to_owned(),
+                                    data: ~[],
+                                    file_size: file_size,
+                                    status: 1, //0: OK, 1: UPDATING
+                                };
+                                cache.insert(path_str.to_owned(), RWArc::new(inited_cache_item));
+                                true
+                            } else { // just exit, since other task is updating it.
+                                false
+                            }
+                        });
+                        
+                        if to_be_updated == true {
+                            // read the file bytes into memory, then copy it to cache item.
+                            // read the data out of the cache_arc, so that other tasks can understand the status, not just waiting.
+                            let mut file_reader = File::open(path).expect("invalid file!");
+                            let file_data = file_reader.read_to_end();
+                            
+                            cache_arc.write(|cache| {
+                                let cache_item_arc = cache.find(&path_str.to_owned()).expect("no such cache item");
+                                cache_item_arc.write(|cache_item| {
+                                    cache_item.data = file_data;
+                                    cache_item.status = 0;
+                                });
+                            });
+                        }
+                    } // do spawn for updating catch on the background.
+                    */
+                } // if cache_item_status == -1 { // Not exist.
+                // not exist, or updating, just read from file.
+                // read from file in chunks, and write to stream
+                let mut file_reader = File::open(path).expect("invalid file!");
+                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                
+                // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
+                let mut remaining_bytes = file_size;
+                while (remaining_bytes >= file_chunk_size) {
+                    stream.write(file_reader.read_bytes(file_chunk_size));
+                    remaining_bytes -= file_chunk_size;
+                }
+                stream.write(file_reader.read_bytes(remaining_bytes));
+            } // if status != 0
+        } //fn
         
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
         let concurrency_sem = self.concurrency_sem.clone();
         let file_chunk_size = self.file_chunk_size;
+        
+        
         // I couldn't send port into another task. So I have to make it as the main task that can access self.notify_port.
         //let notify_port = self.notify_port;
         
@@ -319,10 +412,11 @@ impl WebServer {
             
             // Spawn several tasks to respond the requests concurrently.
             let child_concurrency_sem = concurrency_sem.clone();
+            let cache_arc = self.cache_arc.clone();
             do spawn {
                 let stream = stream_port.recv();
                 // Respond with file content.
-                write_file_into_stream(request.path, stream, request.file_size, file_chunk_size);
+                write_file_into_stream(cache_arc, request.path, stream, request.file_size, file_chunk_size);
                 // Close stream automatically.
                 debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
                 child_concurrency_sem.release();

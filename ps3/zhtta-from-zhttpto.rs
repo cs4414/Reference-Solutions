@@ -1,7 +1,7 @@
 //
 // zhtta.rs
 //
-// Starting code for PS3
+// Reference code for PS3
 // Running on Rust 0.9
 //
 // Note that this code has serious security risks!  You should not run it 
@@ -90,7 +90,6 @@ impl WebServer {
         // Create socket.
         let addr = from_str::<SocketAddr>(format!("{:s}:{:u}", self.ip, self.port)).expect("Address error.");
         
-        
         let request_queue_arc = self.request_queue_arc.clone();
         let shared_notify_chan = self.shared_notify_chan.clone();
         let stream_map_arc = self.stream_map_arc.clone();
@@ -127,7 +126,6 @@ impl WebServer {
                                    },
                         None => ()
                     }
-                    
                     
                     let peer_name = pn_port.recv();
                     
@@ -238,11 +236,8 @@ impl WebServer {
             do spawn {
                 let mut stream = stream_port.recv();
                 // Respond with file content.
-                // TODO: read file content into chunks.
-                
                 // no caching
                 
-                //let mut buf = [0, .. file_chunk_size];
                 let mut file_reader = File::open(request.path).expect("invalid file!");
                 stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
                 
@@ -266,6 +261,4 @@ fn main() {
     let mut zhtta = WebServer::new(IP, PORT, "./", 5, 50000);
     zhtta.listen();
     zhtta.run();
-
-    return;
 }

@@ -21,13 +21,12 @@ use std::io::net::ip::{SocketAddr};
 use std::{os, str};
 use std::hashmap::HashMap;
 
-use extra::arc::MutexArc;
+use extra::arc::{RWArc, MutexArc};
 use extra::priority_queue::PriorityQueue;
 use extra::sync::Semaphore;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        uint = 4414;
-static mut visitor_count: uint = 0;
 
 struct HTTP_Request {
      // Use peer_name as the key to TcpStream. 
@@ -53,6 +52,7 @@ struct WebServer {
     file_chunk_size: uint,
     
     concurrency_sem: Semaphore,
+    visitor_count_arc: RWArc<uint>,
     request_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>,
     stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>,
     
@@ -72,6 +72,7 @@ impl WebServer {
             max_concurrency: max_concurrency,
             file_chunk_size: file_chunk_size,
             
+            visitor_count_arc: RWArc::new(0 as uint),
             concurrency_sem: Semaphore::new(max_concurrency as int),
             
             //request_queue: PriorityQueue::new(),
@@ -93,6 +94,7 @@ impl WebServer {
         let request_queue_arc = self.request_queue_arc.clone();
         let shared_notify_chan = self.shared_notify_chan.clone();
         let stream_map_arc = self.stream_map_arc.clone();
+        let visitor_count_arc = self.visitor_count_arc.clone();
         
         do spawn {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
@@ -104,12 +106,12 @@ impl WebServer {
                 
                 let notify_chan = shared_notify_chan.clone();
                 let stream_map_arc = stream_map_arc.clone();
+                let visitor_count_arc = visitor_count_arc.clone();
                 // Spawn a task to handle the connection
                 do spawn {
-                    unsafe {
-                        visitor_count += 1;
-                    }
-                    
+                    visitor_count_arc.write(|count| {
+                        *count += 1;
+                    });
                     let shared_req_queue = queue_port.recv();
                   
                     let mut stream = stream;
@@ -152,7 +154,7 @@ impl WebServer {
                                  <body>
                                  <h1>Greetings, Krusty!</h1>
                                  <h2>Visitor count: {0:u}</h2>
-                                 </body></html>\r\n", unsafe{visitor_count});
+                                 </body></html>\r\n", visitor_count_arc.read(|count| {*count}));
                             stream.write(response.as_bytes());
                         } else {
                             // request scheduling

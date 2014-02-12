@@ -23,6 +23,7 @@ use std::hashmap::HashMap;
 
 use extra::arc::MutexArc;
 use extra::priority_queue::PriorityQueue;
+use extra::sync::Semaphore;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        uint = 4414;
@@ -48,7 +49,9 @@ struct WebServer {
     ip: ~str,
     port: uint,
     working_directory: ~str,
+    max_concurrency: uint,
     
+    concurrency_sem: Semaphore,
     request_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>,
     stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>,
     
@@ -57,7 +60,7 @@ struct WebServer {
 }
 
 impl WebServer {
-    fn new(ip: &str, port: uint, working_directory: &str) -> WebServer {
+    fn new(ip: &str, port: uint, working_directory: &str, max_concurrency: uint) -> WebServer {
         // change directory to working_directory
         // chroot jain in working_directory
         let (notify_port, shared_notify_chan) = SharedChan::new();
@@ -65,6 +68,9 @@ impl WebServer {
             ip: ip.to_owned(),
             port: port,
             working_directory: working_directory.to_owned(),
+            max_concurrency: max_concurrency,
+            
+            concurrency_sem: Semaphore::new(max_concurrency as int),
             
             //request_queue: PriorityQueue::new(),
             request_queue_arc: MutexArc::new(PriorityQueue::new()),
@@ -188,13 +194,16 @@ impl WebServer {
     fn run(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
+        
+        let max_concurrency = self.max_concurrency;
+        let concurrency_sem = self.concurrency_sem.clone();
         // I couldn't send port into another task. So I have to make it as the main task that can access self.notify_port.
         //let notify_port = self.notify_port;
         
         let (request_port, request_chan) = Chan::new();
-        let (stream_port, stream_chan) = Chan::new();
         loop {
-            self.notify_port.recv(); // waiting for new request enqueued.
+            concurrency_sem.acquire();  // waiting for concurrency semaphore.
+            self.notify_port.recv();    // waiting for new request enqueued.
             
             req_queue_get.access( |req_queue| {
                 match req_queue.maybe_pop() { // SRPT queue.
@@ -211,28 +220,36 @@ impl WebServer {
             
             // Get stream from hashmap.
             // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
+            let (stream_port, stream_chan) = Chan::new();
+            
             unsafe {
                 stream_map_get.unsafe_access(|local_stream_map| {
                     let stream = local_stream_map.pop(&request.peer_name).expect("no option tcpstream");
                     stream_chan.send(stream);
                 });
             }
-            let mut stream = stream_port.recv();
+            
+            
             
             // TODO: Spawn several tasks to respond the requests concurrently.
-            // Respond with file content.
-            // TODO: read file content into chunks.
-            let contents = File::open(request.path).read_to_end();
-            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-            stream.write(contents);
-            // Close stream automatically.
-            debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
+            let child_concurrency_sem = concurrency_sem.clone();
+            do spawn {
+                let mut stream = stream_port.recv();
+                // Respond with file content.
+                // TODO: read file content into chunks.
+                let contents = File::open(request.path).read_to_end();
+                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                stream.write(contents);
+                // Close stream automatically.
+                debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
+                child_concurrency_sem.release();
+            }
         }
     }
 }
 
 fn main() {
-    let mut zhtta = WebServer::new(IP, PORT, "./");
+    let mut zhtta = WebServer::new(IP, PORT, "./", 1);
     zhtta.listen();
     zhtta.run();
 

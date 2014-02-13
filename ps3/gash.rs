@@ -1,5 +1,5 @@
 //
-// gash module
+// gash module for ps2 and ps3
 //
 // University of Virginia - cs4414 Spring 2014
 // Weilin Xu, David Evans
@@ -9,9 +9,7 @@
 use std::{io, run, os, libc, path};
 use std::io::pipe::PipeStream;
 
-// run command line, called by self.run() or external -c parameter.
 pub fn run_cmdline(cmd_line: &str) -> ~str{
-    // handle background commands using &
     let cmd_line: ~str = cmd_line.trim().to_owned();
     
     // handle pipelines 
@@ -25,7 +23,7 @@ pub fn run_cmdline(cmd_line: &str) -> ~str{
     for _ in range(0, progs.len() - 1) {
         pipes.push(os::pipe());
     }
-    pipes.push(os::pipe()); // last is not necessarily the standard output
+    pipes.push(os::pipe()); // last is not necessarily the standard output, for ps3
     
     for i in range(0, progs.len()) {
         run_single_cmd(progs[i], pipes[i].input, pipes[i+1].out, 2, 
@@ -51,11 +49,8 @@ fn run_single_cmd(cmd_line: &str, pipe_in: libc::c_int, pipe_out: libc::c_int, p
     let mut in_fd = pipe_in;
     let err_fd = pipe_err;
     
-    
     let mut i = 0;
-    // found problem on redirection
-    // `ping google.com | grep 1 > ping.txt &` didn't work
-    // because grep won't flush the buffer until terminated (only) by SIGINT.
+    
     while (i < argv.len()) {
         if (argv[i] == ~">") {
             argv.remove(i);
@@ -110,7 +105,7 @@ fn run_single_cmd(cmd_line: &str, pipe_in: libc::c_int, pipe_out: libc::c_int, p
                                  });
                             }
                         }
-                  }                 
+                  }
     } // match program
 } // run_single_cmd
     
@@ -127,7 +122,6 @@ fn parse_argv(cmd_line: &str) -> ~[~str] {
         } else {
             argv.push(group[i].clone());
         }
-    
     }
     
     argv
@@ -144,9 +138,14 @@ fn get_fd(fpath: &str, mode: &str) -> libc::c_int {
         return libc::fileno(libc::fopen(fpathbuf, modebuf));
     }
 }
-/*
-fn main() {
-    let ret_str = run_cmdline("curl \"http://rust-class.org/pages/ps2.html\" | sed \"s/[^a-zA-Z ]/ /g\" | tr \"A-Z \" \"a-z\n\"| grep \"[a-z]\" | sort -u");
-    println(ret_str);
+
+#[cfg(test)]
+mod tests {
+    use gash;
+    #[test]
+    fn test_run_cmdline() {
+        let ret_str = run_cmdline("echo -e \"abc\nxyz\" | grep ab");
+        println(ret_str);
+        assert_eq!(ret_str, ~"abc");
+    }
 }
-*/

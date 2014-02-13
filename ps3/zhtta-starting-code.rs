@@ -11,7 +11,7 @@
 // Weilin Xu and David Evans
 // Version 0.4
 
-// To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="zhtta=debug" 
+// To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="zhtta=debug"
 
 #[feature(globs)];
 extern mod extra;
@@ -252,10 +252,10 @@ impl WebServer {
 fn get_args() -> (~str, uint, ~str) {
     fn print_usage(program: &str) {
         println!("Usage: {:s} [options]", program);
-        println!("--ip             \tIP address, \"{:s}\" by default.", IP);
-        println!("--port           \tport number, \"{:u}\" by default.", PORT);
-        println!("--www            \tworking directory, \"{:s}\" by default", WWW_DIR);
-        println("-h --help     \tUsage");
+        println!("--ip     \tIP address, \"{:s}\" by default.", IP);
+        println!("--port   \tport number, \"{:u}\" by default.", PORT);
+        println!("--www    \tworking directory, \"{:s}\" by default", WWW_DIR);
+        println("-h --help \tUsage");
     }
     
     /* Begin processing program arguments and initiate the parameters. */

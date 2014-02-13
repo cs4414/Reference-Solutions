@@ -19,6 +19,7 @@ extern mod extra;
 use std::io::*;
 use std::io::net::ip::{SocketAddr};
 use std::{os, str};
+use std::path::Path;
 use std::hashmap::HashMap;
 
 use extra::arc::MutexArc;
@@ -33,13 +34,13 @@ struct HTTP_Request {
      // Due to a bug in extra::arc in Rust 0.9, it is very inconvenient to use TcpStream without the "Freeze" bound.
      // Issue: https://github.com/mozilla/rust/issues/12139 
     peer_name: ~str,
-    path: ~std::path::PosixPath,
+    path: ~Path,
 }
 
 struct WebServer {
     ip: ~str,
     port: uint,
-    working_directory: ~str,
+    www_dir_path: ~Path,
     
     request_queue_arc: MutexArc<~[HTTP_Request]>,
     stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>,
@@ -49,15 +50,14 @@ struct WebServer {
 }
 
 impl WebServer {
-    fn new(ip: &str, port: uint, working_directory: &str) -> WebServer {
-        // TODO: chroot jail
-        // change directory to working_directory
-        // chroot jail in working_directory
+    fn new(ip: &str, port: uint, www_dir: &str) -> WebServer {
+        let www_dir_path = ~Path::new(www_dir);
+        os::change_dir(www_dir_path.clone());
         let (notify_port, shared_notify_chan) = SharedChan::new();
         WebServer {
             ip: ip.to_owned(),
             port: port,
-            working_directory: working_directory.to_owned(),
+            www_dir_path: www_dir_path,
                         
             request_queue_arc: MutexArc::new(~[]),
             stream_map_arc: MutexArc::new(HashMap::new()),
@@ -246,6 +246,6 @@ impl WebServer {
 }
 
 fn main() {
-    let mut zhtta = WebServer::new(IP, PORT, "./");
+    let mut zhtta = WebServer::new(IP, PORT, "./www");
     zhtta.run();
 }

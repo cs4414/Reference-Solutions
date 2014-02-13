@@ -29,7 +29,7 @@ static PORT:        uint = 4414;
 static mut visitor_count: uint = 0;
 
 struct HTTP_Request {
-     // Use peer_name as the key to TcpStream in hashmap. 
+     // Use peer_name as the key to access TcpStream in hashmap. 
      // Due to a bug in extra::arc in Rust 0.9, it is very inconvenient to use TcpStream without the "Freeze" bound.
      // Issue: https://github.com/mozilla/rust/issues/12139 
     peer_name: ~str,
@@ -90,7 +90,7 @@ impl WebServer {
                 let notify_chan = shared_notify_chan.clone();
                 let stream_map_arc = stream_map_arc.clone();
                 
-                // Spawn a task to handle the connection
+                // Spawn a task to handle the connection.
                 do spawn {
                     unsafe { visitor_count += 1; }
                     let shared_req_queue = queue_port.recv();

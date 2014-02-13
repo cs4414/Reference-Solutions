@@ -9,7 +9,7 @@
 // 
 // University of Virginia - cs4414 Spring 2014
 // Weilin Xu and David Evans
-// Version 0.4
+// Version 0.5
 
 // To see debug! outputs set the RUST_LOG environment variable, e.g.: export RUST_LOG="zhtta=debug" 
 

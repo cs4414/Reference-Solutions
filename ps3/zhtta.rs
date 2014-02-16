@@ -111,6 +111,18 @@ impl WebServer {
         self.schedule_request_for_static_file();
     }
     
+    fn get_peer_name(stream: &mut Option<std::io::net::tcp::TcpStream>) -> ~str {
+        match *stream {
+            Some(ref mut s) => {
+                         match s.peer_name() {
+                            Some(pn) => {pn.to_str()},
+                            None => (~"")
+                         }
+                       },
+            None => (~"")
+        }
+    }
+    
     fn listen(&mut self) {
         // Create socket.
         let addr = from_str::<SocketAddr>(format!("{:s}:{:u}", self.ip, self.port)).expect("Address error.");
@@ -136,23 +148,12 @@ impl WebServer {
                     visitor_count_arc.write(|count| {
                         *count += 1;
                     });
-                    let shared_req_queue = queue_port.recv();
+                    let req_queue_arc = queue_port.recv();
                   
                     let mut stream = stream;
                     
-                    let (pn_port, pn_chan) = Chan::new();
-                    
-                    match stream {
-                        Some(ref mut s) => {
-                                     match s.peer_name() {
-                                        Some(pn) => {pn_chan.send(pn.to_str()); debug!("=====Received connection from: [{:s}]=====", pn.to_str());},
-                                        None => ()
-                                     }
-                                   },
-                        None => ()
-                    }
-                    
-                    let peer_name = pn_port.recv();
+                    let peer_name = WebServer::get_peer_name(&mut stream);
+                    debug!("=====Received connection from: [{:s}]=====", peer_name);
                     
                     let mut buf = [0, ..500];
                     stream.read(buf);
@@ -179,41 +180,45 @@ impl WebServer {
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
                             // request scheduling
-                            
-                            // Save stream in hashmap for later response.
-                            let (stream_port, stream_chan) = Chan::new();
-                            stream_chan.send(stream);
-                            unsafe {
-                                // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
-                                stream_map_arc.unsafe_access(|local_stream_map| {
-                                    let stream = stream_port.recv();
-                                    local_stream_map.swap(peer_name.clone(), stream);
-                                });
-                            }
-                            
-                            // Get file size.
-                            let file_size = std::io::fs::stat(path_obj).size as uint;
-                            
-                            // Enqueue the HTTP request.
-                            let req = HTTP_Request{peer_name: peer_name.clone(), path: path_obj.clone(), file_size: file_size, priority: file_size};
-                            
-                            let (req_port, req_chan) = Chan::new();
-                            req_chan.send(req);
-                            debug!("Waiting for queue mutex.");
-                            shared_req_queue.access(|local_req_queue| {
-                                debug!("Got queue mutex lock.");
-                                let req: HTTP_Request = req_port.recv();
-                                local_req_queue.push(req);
-                                debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
-                            });
-                            
-                            notify_chan.send(()); // Send incoming notification to responder.
+                            WebServer::enqueue_new_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
                         }
                     }
-                    //debug!("=====Terminated connection from [{:s}].=====", peer_name);
                 }
             } // for
         }
+    }
+    
+    fn enqueue_new_request(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path, stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>, req_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>, shared_notify_chan: SharedChan<()>) {
+        // Save stream in hashmap for later response.
+        let mut stream = stream;
+        let peer_name = WebServer::get_peer_name(&mut stream);
+        let (stream_port, stream_chan) = Chan::new();
+        stream_chan.send(stream);
+        unsafe {
+            // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
+            stream_map_arc.unsafe_access(|local_stream_map| {
+                let stream = stream_port.recv();
+                local_stream_map.swap(peer_name.clone(), stream);
+            });
+        }
+        
+        // Get file size.
+        let file_size = std::io::fs::stat(path_obj).size as uint;
+        
+        // Enqueue the HTTP request.
+        let req = HTTP_Request{peer_name: peer_name.clone(), path: ~path_obj.clone(), file_size: file_size, priority: file_size};
+        
+        let (req_port, req_chan) = Chan::new();
+        req_chan.send(req);
+        debug!("Waiting for queue mutex.");
+        req_queue_arc.access(|local_req_queue| {
+            debug!("Got queue mutex lock.");
+            let req: HTTP_Request = req_port.recv();
+            local_req_queue.push(req);
+            debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
+        });
+        
+        shared_notify_chan.send(()); // Send incoming notification to responder.
     }
     
     fn respond_with_default_page(stream: Option<std::io::net::tcp::TcpStream>, visitor_count_arc: RWArc<uint>) {

@@ -161,7 +161,7 @@ impl WebServer {
     }
     
     // TODO: Problem [x] Streaming file.
-    // TODO: Application-layer file caching.
+    // TODO: Problem [x] Application-layer file caching.
     fn respond_with_static_file(path: &Path, stream: Option<std::io::net::tcp::TcpStream>) {
         let mut stream = stream;
         
@@ -235,7 +235,7 @@ impl WebServer {
                 });
             }
             
-            // TODO: Problem [x] Spawn several tasks to respond the dequeued requests concurrently.
+            // TODO: Problem [x] Spawn several tasks to respond the dequeued requests concurrently. You may need a semophore to control the concurrency.
             let stream = stream_port.recv();
             WebServer::respond_with_static_file(request.path, stream);
             // Close stream automatically.

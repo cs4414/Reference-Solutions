@@ -135,7 +135,7 @@ impl WebServer {
         }
     }
     
-    // TODO: Problem [x] Safe visitor counter.
+    // TODO: Problem 1, Safe Visitor Counter.
     fn respond_with_default_page(stream: Option<std::io::net::tcp::TcpStream>) {
         let mut stream = stream;
         let response: ~str = 
@@ -152,7 +152,7 @@ impl WebServer {
         stream.write(response.as_bytes());
     }
     
-    // TODO: Problem [x] Server-side gashing.
+    // TODO: Problem 2, Server-Side Gashing.
     fn respond_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path) {
         let mut stream = stream;
         let mut file_reader = File::open(path_obj);
@@ -160,8 +160,8 @@ impl WebServer {
         stream.write(file_reader.read_to_end());
     }
     
-    // TODO: Problem [x] Streaming file.
-    // TODO: Problem [x] Application-layer file caching.
+    // TODO: Problem 6, File Streaming.
+    // TODO: Problem 7, Application-layer file caching.
     fn respond_with_static_file(path: &Path, stream: Option<std::io::net::tcp::TcpStream>) {
         let mut stream = stream;
         
@@ -170,7 +170,7 @@ impl WebServer {
         stream.write(file_reader.read_to_end());
     }
     
-    // TODO: Problem [x] Smarter scheduling on requests for static files.
+    // TODO: Problem 3&4&5, Smarter Scheduling.
     fn enqueue_static_file_request(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path, stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>, req_queue_arc: MutexArc<~[HTTP_Request]>, notify_chan: SharedChan<()>) {
         let mut stream = stream;
         let peer_name = WebServer::get_peer_name(&mut stream);
@@ -202,7 +202,7 @@ impl WebServer {
         notify_chan.send(()); // Send incoming notification to responder task.
     }
     
-    // TODO: Problem [x] Smarter scheduling on requests for static files.
+    // TODO: Problem 3&4&5, Smarter Scheduling.
     fn dequeue_static_file_request(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
@@ -235,7 +235,7 @@ impl WebServer {
                 });
             }
             
-            // TODO: Problem [x] Spawn several tasks to respond the dequeued requests concurrently. You may need a semophore to control the concurrency.
+            // TODO: Problem 4, Spawning more tasks to respond the dequeued requests concurrently. You may need a semophore to control the concurrency.
             let stream = stream_port.recv();
             WebServer::respond_with_static_file(request.path, stream);
             // Close stream automatically.

@@ -18,17 +18,21 @@ extern mod extra;
 
 use std::io::*;
 use std::io::net::ip::{SocketAddr};
-use std::{os, str};
+use std::{os, str, libc, from_str};
 use std::hashmap::HashMap;
 
 use extra::arc::{RWArc, MutexArc};
 use extra::priority_queue::PriorityQueue;
 use extra::sync::Semaphore;
+use extra::getopts;
 
 mod gash;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        uint = 4414;
+static WWW_DIR: &'static str = "./www";
+static MAX_CONCURRENCY: uint = 5;
+static CHUNK_SIZE: uint = 50000;
 
 struct HTTP_Request {
      // Use peer_name as the key to TcpStream. 
@@ -57,7 +61,7 @@ struct CacheItem {
 struct WebServer {
     ip: ~str,
     port: uint,
-    working_directory: ~str,
+    www_dir_path: ~Path,
     max_concurrency: uint,
     file_chunk_size: uint,
     
@@ -75,15 +79,15 @@ struct WebServer {
 }
 
 impl WebServer {
-    fn new(ip: &str, port: uint, working_directory: &str, max_concurrency: uint, file_chunk_size: uint) -> WebServer {
+    fn new(ip: &str, port: uint, www_dir: &str, max_concurrency: uint, file_chunk_size: uint) -> WebServer {
         // TODO: chroot jail
-        // change directory to working_directory
-        // chroot jail in working_directory
+        let www_dir_path = ~Path::new(www_dir);
+        os::change_dir(www_dir_path.clone());
         let (notify_port, shared_notify_chan) = SharedChan::new();
         WebServer {
             ip: ip.to_owned(),
             port: port,
-            working_directory: working_directory.to_owned(),
+            www_dir_path: www_dir_path,
             max_concurrency: max_concurrency,
             file_chunk_size: file_chunk_size,
             
@@ -109,6 +113,7 @@ impl WebServer {
     fn listen(&mut self) {
         // Create socket.
         let addr = from_str::<SocketAddr>(format!("{:s}:{:u}", self.ip, self.port)).expect("Address error.");
+        let www_dir_path_str = self.www_dir_path.as_str().expect("invalid www path?").to_owned();
         
         let request_queue_arc = self.request_queue_arc.clone();
         let shared_notify_chan = self.shared_notify_chan.clone();
@@ -117,7 +122,8 @@ impl WebServer {
         
         do spawn {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
-            println(format!("Listening on [{:s}] ...", addr.to_str()));
+            println!("Listening on [{:s}] ...", addr.to_str());
+            println!("Working directory in [{:s}].", www_dir_path_str);
             
             for stream in acceptor.incoming() {
                 let (queue_port, queue_chan) = Chan::new();
@@ -441,7 +447,66 @@ impl WebServer {
     }
 }
 
+fn get_args() -> (~str, uint, ~str, uint, uint
+) {
+    fn print_usage(program: &str) {
+        println!("Usage: {:s} [options]", program);
+        println!("--ip     \tIP address, \"{:s}\" by default.", IP);
+        println!("--port   \tport number, \"{:u}\" by default.", PORT);
+        println!("--www    \tworking directory, \"{:s}\" by default", WWW_DIR);
+        println!("--concurrency\t The max concurrency of responding tasks, \"{:u}\" by default", MAX_CONCURRENCY);
+        println!("--chunk-size\t The chunk size for streaming file, \"{:u}\" by default", CHUNK_SIZE);
+        println("-h --help \tUsage");
+    }
+    
+    /* Begin processing program arguments and initiate the parameters. */
+    let args = os::args();
+    let program = args[0].clone();
+    
+    let opts = ~[
+        getopts::optopt("ip"),
+        getopts::optopt("port"),
+        getopts::optopt("www"),
+        getopts::optopt("concurrency"),
+        getopts::optopt("chunk-size"),
+        getopts::optflag("h"),
+        getopts::optflag("help")
+    ];
+
+    let matches = match getopts::getopts(args.tail(), opts) {
+        Ok(m) => { m }
+        Err(f) => { fail!(f.to_err_msg()) }
+    };
+
+    if matches.opt_present("h") || matches.opt_present("help") {
+        print_usage(program);
+        unsafe { libc::exit(1); }
+    }
+    
+    let ip_str = if matches.opt_present("ip") {
+                    matches.opt_str("ip").expect("invalid ip address?").to_owned()
+                 } else { IP.to_owned() };
+    
+    let port:uint = if matches.opt_present("port") {
+                        from_str::from_str(matches.opt_str("port").expect("invalid port number?")).expect("not uint?")
+                    } else { PORT };
+    
+    let www_dir_str = if matches.opt_present("www") {
+                        matches.opt_str("www").expect("invalid www argument?") 
+                      } else { WWW_DIR.to_owned() };
+    
+    let concurrency:uint = if matches.opt_present("concurrency") {
+                            from_str::from_str(matches.opt_str("concurrency").expect("invalid concurrency argument?")).expect("not uint?")
+                          } else { MAX_CONCURRENCY };
+    
+    let chunk_size:uint = if matches.opt_present("chunk-size") {
+                            from_str::from_str(matches.opt_str("chunk-size").expect("invalid chunk-size argument?")).expect("not uint?")
+                          } else { CHUNK_SIZE };
+    (ip_str, port, www_dir_str, concurrency, chunk_size)
+}
+
 fn main() {
-    let mut zhtta = WebServer::new(IP, PORT, "./", 5, 50000);
+    let (ip_str, port, www_dir_str, concurrency, chunk_size) = get_args();
+    let mut zhtta = WebServer::new(ip_str, port, www_dir_str, concurrency, chunk_size);
     zhtta.run();
 }

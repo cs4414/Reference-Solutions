@@ -25,16 +25,29 @@ use std::hashmap::HashMap;
 use extra::getopts;
 use extra::arc::MutexArc;
 
-static IP: &'static str = "127.0.0.1";
-static PORT:        uint = 4414;
-static WWW_DIR: &'static str = "./www";
+static SERVER_NAME : &'static str = "Zhtta Version 0.5";
 
-static mut visitor_count: uint = 0;
+static IP : &'static str = "127.0.0.1";
+static PORT : uint = 4414;
+static WWW_DIR : &'static str = "./www";
+
+static HTTP_OK : &'static str = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n";
+static HTTP_BAD : &'static str = "HTTP/1.1 404 Not Found\r\n\r\n";
+
+static COUNTER_STYLE : &'static str = "<doctype !html><html><head><title>Hello, Rust!</title>
+             <style>body { background-color: #884414; color: #FFEEAA}
+                    h1 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red }
+                    h2 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green }
+             </style></head>
+             <body>";
+
+static mut visitor_count : uint = 0;
 
 struct HTTP_Request {
-     // Use peer_name as the key to access TcpStream in hashmap. 
-     // Due to a bug in extra::arc in Rust 0.9, it is very inconvenient to use TcpStream without the "Freeze" bound.
-     // Issue: https://github.com/mozilla/rust/issues/12139 
+    // Use peer_name as the key to access TcpStream in hashmap. 
+
+    // (Due to a bug in extra::arc in Rust 0.9, it is very inconvenient to use TcpStream without the "Freeze" bound.
+    //  See issue: https://github.com/mozilla/rust/issues/12139)
     peer_name: ~str,
     path: ~Path,
 }
@@ -53,9 +66,10 @@ struct WebServer {
 
 impl WebServer {
     fn new(ip: &str, port: uint, www_dir: &str) -> WebServer {
+        let (notify_port, shared_notify_chan) = SharedChan::new();
         let www_dir_path = ~Path::new(www_dir);
         os::change_dir(www_dir_path.clone());
-        let (notify_port, shared_notify_chan) = SharedChan::new();
+
         WebServer {
             ip: ip.to_owned(),
             port: port,
@@ -65,7 +79,8 @@ impl WebServer {
             stream_map_arc: MutexArc::new(HashMap::new()),
             
             notify_port: notify_port,
-            shared_notify_chan: shared_notify_chan,        }
+            shared_notify_chan: shared_notify_chan,        
+        }
     }
     
     fn run(&mut self) {
@@ -74,7 +89,6 @@ impl WebServer {
     }
     
     fn listen(&mut self) {
-        // Create socket.
         let addr = from_str::<SocketAddr>(format!("{:s}:{:u}", self.ip, self.port)).expect("Address error.");
         let www_dir_path_str = self.www_dir_path.as_str().expect("invalid www path?").to_owned();
         
@@ -82,10 +96,10 @@ impl WebServer {
         let shared_notify_chan = self.shared_notify_chan.clone();
         let stream_map_arc = self.stream_map_arc.clone();
                 
-        do spawn {
+        spawn(proc() {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
-            println!("Listening on [{:s}] ...", addr.to_str());
-            println!("Working directory in [{:s}].", www_dir_path_str);
+            println!("{:s} listening on {:s} (serving from: {:s}).", 
+                     SERVER_NAME, addr.to_str(), www_dir_path_str);
             
             for stream in acceptor.incoming() {
                 let (queue_port, queue_chan) = Chan::new();
@@ -95,9 +109,9 @@ impl WebServer {
                 let stream_map_arc = stream_map_arc.clone();
                 
                 // Spawn a task to handle the connection.
-                do spawn {
-                    unsafe { visitor_count += 1; }
-                    let req_queue_arc = queue_port.recv();
+                spawn(proc() {
+                    unsafe { visitor_count += 1; } // TODO: Fix unsafe counter
+                    let request_queue_arc = queue_port.recv();
                   
                     let mut stream = stream;
                     
@@ -106,7 +120,7 @@ impl WebServer {
                     let mut buf = [0, ..500];
                     stream.read(buf);
                     let request_str = str::from_utf8(buf);
-                    debug!("Request :\n{:s}", request_str);
+                    debug!("Request:\n{:s}", request_str);
                     
                     let req_group : ~[&str]= request_str.splitn(' ', 3).collect();
                     if req_group.len() > 2 {
@@ -120,62 +134,71 @@ impl WebServer {
                             None => "",
                         };
                         
-                        if !path_obj.exists() || path_obj.is_dir() {
-                            WebServer::respond_with_default_page(stream);
+                        debug!("Requested path: [{:s}]", path_obj.as_str().expect("error"));
+                        debug!("Requested path: [{:s}]", path_str);
+                             
+                        if path_str == ~"./" {
+                            debug!("===== Counter Page request =====");
+                            WebServer::respond_with_counter_page(stream);
+                            debug!("=====Terminated connection from [{:s}].=====", peer_name);
+                        } else if !path_obj.exists() || path_obj.is_dir() {
+                            debug!("===== Error page request =====");
+                            WebServer::respond_with_error_page(stream, path_obj);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else if ext_str == "shtml" { // Dynamic web pages.
+                            debug!("===== Dynamic Page request =====");
                             WebServer::respond_with_dynamic_page(stream, path_obj);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
-                        } else {
-                            WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
+                        } else { 
+                            debug!("===== Static Page request =====");
+                            WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, request_queue_arc, notify_chan);
                         }
                     }
-                }
+                });
             }
-        }
+        });
     }
-    
-    // TODO: Problem 1, Safe Visitor Counter.
-    fn respond_with_default_page(stream: Option<std::io::net::tcp::TcpStream>) {
+
+    fn respond_with_error_page(stream: Option<std::io::net::tcp::TcpStream>, path: &Path) {
+        let mut stream = stream;
+        let msg: ~str = format!("Cannot open: {:s}", path.as_str().expect("invalid path").to_owned());
+
+        stream.write(HTTP_BAD.as_bytes());
+        stream.write(msg.as_bytes());
+    }
+
+    // TODO: Safe visitor counter.
+    fn respond_with_counter_page(stream: Option<std::io::net::tcp::TcpStream>) {
         let mut stream = stream;
         let response: ~str = 
-            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
-             <doctype !html><html><head><title>Hello, Rust!</title>
-             <style>body \\{ background-color: \\#111; color: \\#FFEEAA \\}
-                    h1 \\{ font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red\\}
-                    h2 \\{ font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm green\\}
-             </style></head>
-             <body>
-             <h1>Greetings, Krusty!</h1>
-             <h2>Visitor count: {0:u}</h2>
-             </body></html>\r\n", unsafe { visitor_count } );
+            format!("{:s}{:s}<h1>Greetings, Krusty!</h1>
+                     <h2>Visitor count: {:u}</h2></body></html>\r\n", 
+                    HTTP_OK, COUNTER_STYLE, 
+                    unsafe { visitor_count } );
+        debug!("Responding to counter request");
         stream.write(response.as_bytes());
     }
     
-    // TODO: Problem 2, Server-Side Gashing.
-    fn respond_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path) {
+    // TODO: Streaming file.
+    // TODO: Application-layer file caching.
+    fn respond_with_static_file(stream: Option<std::io::net::tcp::TcpStream>, path: &Path) {
         let mut stream = stream;
-        let mut file_reader = File::open(path_obj);
-        stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
+        let mut file_reader = File::open(path).expect("Invalid file!");
+        stream.write(HTTP_OK.as_bytes());
         stream.write(file_reader.read_to_end());
     }
     
-    // TODO: Problem 6, File Streaming.
-    // TODO: Problem 7, Application-layer file caching.
-    fn respond_with_static_file(path: &Path, stream: Option<std::io::net::tcp::TcpStream>) {
-        let mut stream = stream;
-        
-        let mut file_reader = File::open(path).expect("invalid file!");
-        stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-        stream.write(file_reader.read_to_end());
+    // TODO: Server-side gashing.
+    fn respond_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path: &Path) {
+        // for now, just serve as static file
+        WebServer::respond_with_static_file(stream, path);
     }
     
-    // TODO: Problem 3&4&5, Smarter Scheduling.
+    // TODO: Smarter Scheduling.
     fn enqueue_static_file_request(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path, stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>, req_queue_arc: MutexArc<~[HTTP_Request]>, notify_chan: SharedChan<()>) {
+        // Save stream in hashmap for later response.
         let mut stream = stream;
         let peer_name = WebServer::get_peer_name(&mut stream);
-        
-        // Save stream in hashmap for later response.
         let (stream_port, stream_chan) = Chan::new();
         stream_chan.send(stream);
         unsafe {
@@ -187,10 +210,10 @@ impl WebServer {
         }
         
         // Enqueue the HTTP request.
-        let req = HTTP_Request{peer_name: peer_name.clone(), path: ~path_obj.clone()};
-        
+        let req = HTTP_Request { peer_name: peer_name.clone(), path: ~path_obj.clone() };
         let (req_port, req_chan) = Chan::new();
         req_chan.send(req);
+
         debug!("Waiting for queue mutex lock.");
         req_queue_arc.access(|local_req_queue| {
             debug!("Got queue mutex lock.");
@@ -200,14 +223,16 @@ impl WebServer {
         });
         
         notify_chan.send(()); // Send incoming notification to responder task.
+    
+    
     }
     
-    // TODO: Problem 3&4&5, Smarter Scheduling.
+    // TODO: Smarter Scheduling.
     fn dequeue_static_file_request(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
-        // Port<> could not be sent to another task. So we have to make this task as the main task that can access self.notify_port.
+        // Port<> cannot be sent to another task. So we have to make this task as the main task that can access self.notify_port.
         
         let (request_port, request_chan) = Chan::new();
         loop {
@@ -235,9 +260,9 @@ impl WebServer {
                 });
             }
             
-            // TODO: Problem 4, Spawning more tasks to respond the dequeued requests concurrently. You may need a semophore to control the concurrency.
+            // TODO: Spawning more tasks to respond the dequeued requests concurrently. You may need a semophore to control the concurrency.
             let stream = stream_port.recv();
-            WebServer::respond_with_static_file(request.path, stream);
+            WebServer::respond_with_static_file(stream, request.path);
             // Close stream automatically.
             debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
         }

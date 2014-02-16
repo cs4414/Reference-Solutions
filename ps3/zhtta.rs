@@ -224,11 +224,12 @@ impl WebServer {
         }
     }
     
+    // Streaming file, Application-layer caching, 
     fn respond_with_static_file(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
         let mut stream = stream;
         let path_str = path.as_str().expect("invalid path");
         
-        /* pseudo code for cacheing
+        /* pseudo code for caching
         
         lookup cache
         if hit {
@@ -268,10 +269,11 @@ impl WebServer {
                 // start a background task to update the cache.
                 WebServer::insert_cache_item(cache_arc.clone(), ~path.clone(), file_size);
             }
-            // It doesn't hit in cahe, just read from file.
+            // It doesn't hit in cache, just read from file.
             let mut file_reader = File::open(path).expect("invalid file!");
             stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             
+            // streaming file.
             // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
             let mut remaining_bytes = file_size;
             while (remaining_bytes >= file_chunk_size) {

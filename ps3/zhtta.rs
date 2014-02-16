@@ -53,12 +53,7 @@ struct CacheItem {
     status: int, // 0: available, 1: updating, -1: not exist.
     //last_modified_time: u64,
 }
-/*
-struct CacheManager {
-    hash_map_arc: RWArc<HashMap<~str, RWArc<CacheItem>>>,
-    
-}
-*/
+
 struct WebServer {
     ip: ~str,
     port: uint,
@@ -109,18 +104,6 @@ impl WebServer {
     fn run(&mut self) {
         self.listen();
         self.dequeue_static_file_request();
-    }
-    
-    fn get_peer_name(stream: &mut Option<std::io::net::tcp::TcpStream>) -> ~str {
-        match *stream {
-            Some(ref mut s) => {
-                         match s.peer_name() {
-                            Some(pn) => {pn.to_str()},
-                            None => (~"")
-                         }
-                       },
-            None => (~"")
-        }
     }
     
     fn listen(&mut self) {
@@ -381,6 +364,18 @@ impl WebServer {
                 debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
                 child_concurrency_sem.release();
             }
+        }
+    }
+    
+    fn get_peer_name(stream: &mut Option<std::io::net::tcp::TcpStream>) -> ~str {
+        match *stream {
+            Some(ref mut s) => {
+                         match s.peer_name() {
+                            Some(pn) => {pn.to_str()},
+                            None => (~"")
+                         }
+                       },
+            None => (~"")
         }
     }
     

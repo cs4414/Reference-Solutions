@@ -108,7 +108,7 @@ impl WebServer {
     
     fn run(&mut self) {
         self.listen();
-        self.schedule_request_for_static_file();
+        self.dequeue_static_file_request();
     }
     
     fn get_peer_name(stream: &mut Option<std::io::net::tcp::TcpStream>) -> ~str {
@@ -180,45 +180,12 @@ impl WebServer {
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
                             // request scheduling
-                            WebServer::enqueue_new_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
+                            WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
                         }
                     }
                 }
             } // for
         }
-    }
-    
-    fn enqueue_new_request(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path, stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>, req_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>, shared_notify_chan: SharedChan<()>) {
-        // Save stream in hashmap for later response.
-        let mut stream = stream;
-        let peer_name = WebServer::get_peer_name(&mut stream);
-        let (stream_port, stream_chan) = Chan::new();
-        stream_chan.send(stream);
-        unsafe {
-            // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
-            stream_map_arc.unsafe_access(|local_stream_map| {
-                let stream = stream_port.recv();
-                local_stream_map.swap(peer_name.clone(), stream);
-            });
-        }
-        
-        // Get file size.
-        let file_size = std::io::fs::stat(path_obj).size as uint;
-        
-        // Enqueue the HTTP request.
-        let req = HTTP_Request{peer_name: peer_name.clone(), path: ~path_obj.clone(), file_size: file_size, priority: file_size};
-        
-        let (req_port, req_chan) = Chan::new();
-        req_chan.send(req);
-        debug!("Waiting for queue mutex.");
-        req_queue_arc.access(|local_req_queue| {
-            debug!("Got queue mutex lock.");
-            let req: HTTP_Request = req_port.recv();
-            local_req_queue.push(req);
-            debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
-        });
-        
-        shared_notify_chan.send(()); // Send incoming notification to responder.
     }
     
     fn respond_with_default_page(stream: Option<std::io::net::tcp::TcpStream>, visitor_count_arc: RWArc<uint>) {
@@ -332,9 +299,40 @@ impl WebServer {
         }
     }
 
+    fn enqueue_static_file_request(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path, stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>, req_queue_arc: MutexArc<PriorityQueue<HTTP_Request>>, shared_notify_chan: SharedChan<()>) {
+        // Save stream in hashmap for later response.
+        let mut stream = stream;
+        let peer_name = WebServer::get_peer_name(&mut stream);
+        let (stream_port, stream_chan) = Chan::new();
+        stream_chan.send(stream);
+        unsafe {
+            // Use unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
+            stream_map_arc.unsafe_access(|local_stream_map| {
+                let stream = stream_port.recv();
+                local_stream_map.swap(peer_name.clone(), stream);
+            });
+        }
+        
+        // Get file size.
+        let file_size = std::io::fs::stat(path_obj).size as uint;
+        
+        // Enqueue the HTTP request.
+        let req = HTTP_Request{peer_name: peer_name.clone(), path: ~path_obj.clone(), file_size: file_size, priority: file_size};
+        
+        let (req_port, req_chan) = Chan::new();
+        req_chan.send(req);
+        debug!("Waiting for queue mutex.");
+        req_queue_arc.access(|local_req_queue| {
+            debug!("Got queue mutex lock.");
+            let req: HTTP_Request = req_port.recv();
+            local_req_queue.push(req);
+            debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
+        });
+        
+        shared_notify_chan.send(()); // Send incoming notification to responder.
+    }
     
-    // Respond the static file requests in queue.
-    fn schedule_request_for_static_file(&mut self) {
+    fn dequeue_static_file_request(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
@@ -444,7 +442,6 @@ impl WebServer {
             }
         } // do spawn for updating catch on the background.
     }
-    
 }
 
 fn main() {

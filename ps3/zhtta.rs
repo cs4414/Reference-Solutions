@@ -108,7 +108,7 @@ impl WebServer {
     
     fn run(&mut self) {
         self.listen();
-        self.response_with_static_file();
+        self.schedule_request_for_static_file();
     }
     
     fn listen(&mut self) {
@@ -172,10 +172,10 @@ impl WebServer {
                         };
                         
                         if !path_obj.exists() || path_obj.is_dir() {
-                            WebServer::response_with_default_page(stream, visitor_count_arc);
+                            WebServer::respond_with_default_page(stream, visitor_count_arc);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else if ext_str == "shtml" { // Dynamic web pages.
-                            WebServer::response_with_dynamic_page(stream, path_obj);
+                            WebServer::respond_with_dynamic_page(stream, path_obj);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
                             // request scheduling
@@ -216,9 +216,7 @@ impl WebServer {
         }
     }
     
-    
-    
-    fn response_with_default_page(stream: Option<std::io::net::tcp::TcpStream>, visitor_count_arc: RWArc<uint>) {
+    fn respond_with_default_page(stream: Option<std::io::net::tcp::TcpStream>, visitor_count_arc: RWArc<uint>) {
         //let visitor_count_arc = self.visitor_count_arc.clone();
         let mut stream = stream;
         let response: ~str = 
@@ -235,7 +233,7 @@ impl WebServer {
         stream.write(response.as_bytes());
     }
     
-    fn response_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path) {
+    fn respond_with_dynamic_page(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path) {
         let mut stream = stream;
         let contents = File::open(path_obj).read_to_str();
         stream.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".as_bytes());
@@ -271,8 +269,67 @@ impl WebServer {
         }
     }
     
+    fn respond_with_static_file(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
+        let mut stream = stream;
+        let path_str = path.as_str().expect("invalid path");
+        
+        /* pseudo code for cacheing
+        
+        lookup cache
+        if hit {
+            write the bytes in cache to stream
+        } else {
+            start a background task to update the cache: create an invalid cached iteam with status marked as false, read bytes from file, write into cached item, status marked as true. 
+            read from file in chunks, and write to stream
+        }
+        
+        // Done: step 1: all cached. 
+        // TODO: step 2: smart replacing algorithm. (LRU?)
+        
+        */
+
+        let mut cache_item_status;
+        unsafe {
+            cache_item_status = cache_arc.unsafe_access(|cache| {
+                let cache_item_arc_opt = cache.find(&path_str.to_owned());
+                match cache_item_arc_opt {
+                    Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
+                    None => -1
+                }
+            });
+        }
+        
+        if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
+            let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
+            
+            cache_item_arc.read(|cache_item| {
+                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                stream.write(cache_item.data);
+            });
+            debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
+            
+        } else {
+            if cache_item_status == -1 { // Not exist.
+                // start a background task to update the cache.
+                WebServer::insert_cache_item(cache_arc.clone(), ~path.clone(), file_size);
+            }
+            // It doesn't hit in cahe, just read from file.
+            let mut file_reader = File::open(path).expect("invalid file!");
+            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+            
+            // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
+            let mut remaining_bytes = file_size;
+            while (remaining_bytes >= file_chunk_size) {
+                stream.write(file_reader.read_bytes(file_chunk_size));
+                remaining_bytes -= file_chunk_size;
+            }
+            stream.write(file_reader.read_bytes(remaining_bytes));
+        }
+    }
+
+    
     // Respond the static file requests in queue.
-    fn response_with_static_file(&mut self) {
+    fn schedule_request_for_static_file(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
@@ -316,7 +373,7 @@ impl WebServer {
             do spawn {
                 let stream = stream_port.recv();
                 // Respond with file content.
-                WebServer::write_file_into_stream(cache_arc, request.path, stream, request.file_size, file_chunk_size);
+                WebServer::respond_with_static_file(cache_arc, request.path, stream, request.file_size, file_chunk_size);
                 // Close stream automatically.
                 debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
                 child_concurrency_sem.release();
@@ -383,63 +440,6 @@ impl WebServer {
         } // do spawn for updating catch on the background.
     }
     
-    fn write_file_into_stream(cache_arc: MutexArc<HashMap<~str, RWArc<CacheItem>>>, path: &Path, stream: Option<std::io::net::tcp::TcpStream>, file_size: uint, file_chunk_size: uint) {
-        let mut stream = stream;
-        let path_str = path.as_str().expect("invalid path");
-        
-        /* pseudo code for cacheing
-        
-        lookup cache
-        if hit {
-            write the bytes in cache to stream
-        } else {
-            start a background task to update the cache: create an invalid cached iteam with status marked as false, read bytes from file, write into cached item, status marked as true. 
-            read from file in chunks, and write to stream
-        }
-        
-        // Done: step 1: all cached. 
-        // TODO: step 2: smart replacing algorithm. (LRU?)
-        
-        */
-
-        let mut cache_item_status = -1;
-        unsafe {
-            cache_item_status = cache_arc.unsafe_access(|cache| {
-                let cache_item_arc_opt = cache.find(&path_str.to_owned());
-                match cache_item_arc_opt {
-                    Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
-                    None => -1
-                }
-            });
-        }
-        
-        if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
-            let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
-            
-            cache_item_arc.read(|cache_item| {
-                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                stream.write(cache_item.data);
-            });
-            debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
-            
-        } else {
-            if cache_item_status == -1 { // Not exist.
-                // start a background task to update the cache.
-                WebServer::insert_cache_item(cache_arc.clone(), ~path.clone(), file_size);
-            }
-            // It doesn't hit in cahe, just read from file.
-            let mut file_reader = File::open(path).expect("invalid file!");
-            stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-            
-            // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
-            let mut remaining_bytes = file_size;
-            while (remaining_bytes >= file_chunk_size) {
-                stream.write(file_reader.read_bytes(file_chunk_size));
-                remaining_bytes -= file_chunk_size;
-            }
-            stream.write(file_reader.read_bytes(remaining_bytes));
-        }
-    }
 }
 
 fn main() {

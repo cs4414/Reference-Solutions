@@ -70,7 +70,7 @@ impl WebServer {
     
     fn run(&mut self) {
         self.listen();
-        self.schedule_request_for_static_file();
+        self.dequeue_static_file_request();
     }
     
     fn listen(&mut self) {
@@ -97,23 +97,11 @@ impl WebServer {
                 // Spawn a task to handle the connection.
                 do spawn {
                     unsafe { visitor_count += 1; }
-                    let shared_req_queue = queue_port.recv();
+                    let req_queue_arc = queue_port.recv();
                   
                     let mut stream = stream;
                     
-                    let (pn_port, pn_chan) = Chan::new();
-                    
-                    match stream {
-                        Some(ref mut s) => {
-                                     match s.peer_name() {
-                                        Some(pn) => {pn_chan.send(pn.to_str()); debug!("=====Received connection from: [{:s}]=====", pn.to_str());},
-                                        None => ()
-                                     }
-                                   },
-                        None => ()
-                    }
-                    
-                    let peer_name = pn_port.recv();
+                    let peer_name = WebServer::get_peer_name(&mut stream);
                     
                     let mut buf = [0, ..500];
                     stream.read(buf);
@@ -138,33 +126,8 @@ impl WebServer {
                         } else if ext_str == "shtml" { // Dynamic web pages.
                             WebServer::respond_with_dynamic_page(stream, path_obj);
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
-                        } else { 
-                            // TODO: Problem [x] Smart scheduling on requests for static files.
-                            // Save stream in hashmap for later response.
-                            let (stream_port, stream_chan) = Chan::new();
-                            stream_chan.send(stream);
-                            unsafe {
-                                // Use an unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
-                                stream_map_arc.unsafe_access(|local_stream_map| {
-                                    let stream = stream_port.recv();
-                                    local_stream_map.swap(peer_name.clone(), stream);
-                                });
-                            }
-                            
-                            // Enqueue the HTTP request.
-                            let req = HTTP_Request{peer_name: peer_name.clone(), path: path_obj.clone()};
-                            
-                            let (req_port, req_chan) = Chan::new();
-                            req_chan.send(req);
-                            debug!("Waiting for queue mutex lock.");
-                            shared_req_queue.access(|local_req_queue| {
-                                debug!("Got queue mutex lock.");
-                                let req: HTTP_Request = req_port.recv();
-                                local_req_queue.push(req);
-                                debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
-                            });
-                            
-                            notify_chan.send(()); // Send incoming notification to responder task.
+                        } else {
+                            WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
                         }
                     }
                 }
@@ -207,8 +170,40 @@ impl WebServer {
         stream.write(file_reader.read_to_end());
     }
     
-    // TODO: Problem [x] Smart scheduling.
-    fn schedule_request_for_static_file(&mut self) {
+    // TODO: Problem [x] Smarter scheduling on requests for static files.
+    fn enqueue_static_file_request(stream: Option<std::io::net::tcp::TcpStream>, path_obj: &Path, stream_map_arc: MutexArc<HashMap<~str, Option<std::io::net::tcp::TcpStream>>>, req_queue_arc: MutexArc<~[HTTP_Request]>, notify_chan: SharedChan<()>) {
+        let mut stream = stream;
+        let peer_name = WebServer::get_peer_name(&mut stream);
+        
+        // Save stream in hashmap for later response.
+        let (stream_port, stream_chan) = Chan::new();
+        stream_chan.send(stream);
+        unsafe {
+            // Use an unsafe method, because TcpStream in Rust 0.9 doesn't have "Freeze" bound.
+            stream_map_arc.unsafe_access(|local_stream_map| {
+                let stream = stream_port.recv();
+                local_stream_map.swap(peer_name.clone(), stream);
+            });
+        }
+        
+        // Enqueue the HTTP request.
+        let req = HTTP_Request{peer_name: peer_name.clone(), path: ~path_obj.clone()};
+        
+        let (req_port, req_chan) = Chan::new();
+        req_chan.send(req);
+        debug!("Waiting for queue mutex lock.");
+        req_queue_arc.access(|local_req_queue| {
+            debug!("Got queue mutex lock.");
+            let req: HTTP_Request = req_port.recv();
+            local_req_queue.push(req);
+            debug!("A new request enqueued, now the length of queue is {:u}.", local_req_queue.len());
+        });
+        
+        notify_chan.send(()); // Send incoming notification to responder task.
+    }
+    
+    // TODO: Problem [x] Smarter scheduling on requests for static files.
+    fn dequeue_static_file_request(&mut self) {
         let req_queue_get = self.request_queue_arc.clone();
         let stream_map_get = self.stream_map_arc.clone();
         
@@ -245,6 +240,18 @@ impl WebServer {
             WebServer::respond_with_static_file(request.path, stream);
             // Close stream automatically.
             debug!("=====Terminated connection from [{:s}].=====", request.peer_name);
+        }
+    }
+    
+    fn get_peer_name(stream: &mut Option<std::io::net::tcp::TcpStream>) -> ~str {
+        match *stream {
+            Some(ref mut s) => {
+                         match s.peer_name() {
+                            Some(pn) => {pn.to_str()},
+                            None => (~"")
+                         }
+                       },
+            None => (~"")
         }
     }
 }

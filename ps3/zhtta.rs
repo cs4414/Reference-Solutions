@@ -31,7 +31,7 @@ mod gash;
 static IP: &'static str = "127.0.0.1";
 static PORT:        uint = 4414;
 static WWW_DIR: &'static str = "./www";
-static MAX_CONCURRENCY: uint = 5;
+static MAX_CONCURRENCY: uint = 15;
 static CHUNK_SIZE: uint = 50000;
 
 struct HTTP_Request {
@@ -119,6 +119,8 @@ impl WebServer {
         let shared_notify_chan = self.shared_notify_chan.clone();
         let stream_map_arc = self.stream_map_arc.clone();
         let visitor_count_arc = self.visitor_count_arc.clone();
+        let cache_arc = self.cache_arc.clone();
+        let file_chunk_size = self.file_chunk_size;
         
         do spawn {
             let mut acceptor = net::tcp::TcpListener::bind(addr).listen();
@@ -131,6 +133,8 @@ impl WebServer {
                 
                 let notify_chan = shared_notify_chan.clone();
                 let stream_map_arc = stream_map_arc.clone();
+                let cache_arc = cache_arc.clone();
+                //let file_chunk_size = file_chunk_size;
                 let visitor_count_arc = visitor_count_arc.clone();
                 // Spawn a task to handle the connection
                 do spawn {
@@ -169,7 +173,12 @@ impl WebServer {
                             debug!("=====Terminated connection from [{:s}].=====", peer_name);
                         } else { // Static file request. Dealing with complex queuing, chunk reading, caching...
                             // request scheduling
-                            WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
+                            let file_size = std::io::fs::stat(path_obj).size as uint;
+                            if file_size < 8000000 {
+                                WebServer::respond_with_static_file(cache_arc, path_obj, stream, file_size, file_chunk_size);
+                            } else {
+                                WebServer::enqueue_static_file_request(stream, path_obj, stream_map_arc, req_queue_arc, notify_chan);
+                            }
                         }
                     }
                 }
@@ -249,33 +258,10 @@ impl WebServer {
         // TODO: step 2: smart replacing algorithm. (LRU?)
         
         */
-
-        let mut cache_item_status;
-        unsafe {
-            cache_item_status = cache_arc.unsafe_access(|cache| {
-                let cache_item_arc_opt = cache.find(&path_str.to_owned());
-                match cache_item_arc_opt {
-                    Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
-                    None => -1
-                }
-            });
-        }
         
-        if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
-            let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
-            
-            cache_item_arc.read(|cache_item| {
-                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
-                stream.write(cache_item.data);
-            });
-            debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
-            
-        } else {
-            if cache_item_status == -1 { // Not exist.
-                // start a background task to update the cache.
-                WebServer::insert_cache_item(cache_arc.clone(), ~path.clone(), file_size);
-            }
-            // It doesn't hit in cache, just read from file.
+        if file_size > 200000000 {
+            // Ignore the caching.
+            debug!("Start reading {} in disk.", path_str);
             let mut file_reader = File::open(path).expect("invalid file!");
             stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
             
@@ -287,6 +273,67 @@ impl WebServer {
                 remaining_bytes -= file_chunk_size;
             }
             stream.write(file_reader.read_bytes(remaining_bytes));
+            debug!("Stop reading {} in disk.", path_str);
+        } else {
+            let mut cache_item_status;
+            unsafe {
+                cache_item_status = cache_arc.unsafe_access(|cache| {
+                    let cache_item_arc_opt = cache.find(&path_str.to_owned());
+                    match cache_item_arc_opt {
+                        Some(cache_item_arc) => {cache_item_arc.read(|cache_item| {cache_item.status})},
+                        None => -1
+                    }
+                });
+            }
+            
+            if cache_item_status == 0 {// OK. just write the bytes in cache into stream.
+                debug!("Wait for reading {} in cache.", path_str);
+                let cache_item_arc = WebServer::get_cache_item_arc(cache_arc, path_str);
+                
+                cache_item_arc.read(|cache_item| {
+                    debug!("Start reading {} in cache.", cache_item.file_path);
+                    stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                    // maybe a bottleneck
+                    stream.write(cache_item.data);
+                    //let remaining_size = cache_item.file_size;
+                    /*
+                    let mut cur_size = 0;
+                    let mut slice_length;
+                    let file_size = cache_item.file_size;
+                    while cur_size < file_size {
+                        if (file_size - cur_size) > 5000000 {
+                            slice_length = 5000000;
+                        } else {
+                            slice_length = file_size - cur_size;
+                        }
+                        stream.write(cache_item.data.slice(cur_size, cur_size+slice_length));
+                        cur_size += slice_length;
+                    }
+                    */
+                    debug!("Finish reading {} in cache.", cache_item.file_path);
+                });
+                debug!("Response in cache, oh yeah!!!!!!!!!!!!!!!!!!!");
+                
+            } else {
+                if cache_item_status == -1 { // Not exist.
+                    // start a background task to update the cache.
+                    WebServer::insert_cache_item(cache_arc.clone(), ~path.clone(), file_size);
+                }
+                // It doesn't hit in cache, just read from file.
+                debug!("Start reading {} in disk.", path_str);
+                let mut file_reader = File::open(path).expect("invalid file!");
+                stream.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream; charset=UTF-8\r\n\r\n".as_bytes());
+                
+                // streaming file.
+                // read_bytes() raises io_error on EOF. Consequently, we should count the remaining bytes ourselves.
+                let mut remaining_bytes = file_size;
+                while (remaining_bytes >= file_chunk_size) {
+                    stream.write(file_reader.read_bytes(file_chunk_size));
+                    remaining_bytes -= file_chunk_size;
+                }
+                stream.write(file_reader.read_bytes(remaining_bytes));
+                debug!("Finish reading {} in disk.", path_str);
+            }
         }
     }
 
